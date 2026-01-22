@@ -1,5 +1,10 @@
 # Changelog
 
+## Version 1.11
+
+- Added disclaimer to About window noting AI-assisted development
+- Added "Built with Claude Code" link in About window
+
 ## Version 1.1
 
 - Added Settings window with help tooltips for each option
