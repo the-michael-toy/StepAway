@@ -23,12 +23,23 @@ A macOS menu bar app that reminds you to take walking breaks.
 - When disabled: `🚶 --:--`
 
 ### Dropdown Menu Options
-- **Enable/Disable Timer** - toggles the timer on/off
-- **Timer Interval** - submenu with options: 1, 30, 45, 60, 90, 120 minutes (checkmark on current)
-- **Idle Timeout** - submenu with options: 1, 2, 3, 5, 10 minutes (checkmark on current)
+- **Settings...** - opens Settings window with sliders for timer interval and idle timeout
 - **Launch at Login** - toggles auto-start (greyed out if not running from /Applications)
 - **Reset Timer** - resets countdown to full interval
+- **About StepAway...** - shows About window with version and links
 - **Quit StepAway** - exits the app
+
+### Settings Window
+- **Enable StepAway** checkbox - toggles the timer on/off
+- **Reminder interval** slider - time between walk reminders
+- **Idle timeout** slider - time before "Still there?" prompt appears
+- Both sliders use discrete stops: 30 sec, 5, 10, 15, 30, 60, 90, 120, 150, 180 minutes
+
+### About Window
+- App icon, name, and version
+- Description
+- Link to Apocalyptic Art Collective
+- Link to GitHub repository
 
 ### Technical Details
 - Written in Swift using AppKit
@@ -44,15 +55,21 @@ A macOS menu bar app that reminds you to take walking breaks.
 StepAway/
 ├── StepAway.xcodeproj/
 ├── StepAway/
-│   ├── StepAwayApp.swift           # App entry point and AppDelegate
-│   ├── MenuBarController.swift  # Menu bar UI and menu handling
-│   ├── ActivityMonitor.swift    # Mouse/keyboard activity detection
-│   ├── TimerManager.swift       # Countdown timer logic
-│   ├── Settings.swift           # AppSettings singleton (UserDefaults wrapper)
-│   ├── Assets.xcassets/         # App icon (XKCD-style stick figure walking away from laptop)
+│   ├── StepAwayApp.swift              # App entry point and AppDelegate
+│   ├── MenuBarController.swift        # Menu bar UI and menu handling
+│   ├── SettingsWindowController.swift # Settings window with sliders
+│   ├── ActivityMonitor.swift          # Mouse/keyboard activity detection
+│   ├── TimerManager.swift             # Countdown timer logic
+│   ├── Settings.swift                 # AppSettings singleton (UserDefaults wrapper)
+│   ├── Assets.xcassets/               # App icon
 │   ├── Info.plist
 │   └── StepAway.entitlements
-└── CONTEXT.md
+├── README.md
+├── LICENSE.md
+├── CONTEXT.md
+├── app-icon.png
+├── step-away-activated.png
+└── step-away-menu.png
 ```
 
 ## Building
@@ -71,17 +88,9 @@ cp -R ~/Library/Developer/Xcode/DerivedData/StepAway-*/Build/Products/Release/St
 ## Notes
 - App sandbox is disabled to allow global event monitoring for activity detection
 - The `AppSettings` class is named to avoid conflict with SwiftUI's `Settings` scene type
+- License: CC0 1.0 (Public Domain)
 
 ## Future Improvements
-
-### Settings Panel
-Replace individual menu items for Timer Interval and Idle Timeout with a single "Settings..." menu item that opens a preferences panel.
-
-### About Panel
-Add an "About StepAway" menu item with version info and attribution.
-
-### Publish to GitHub
-Create a public repository for the project.
 
 ### Better Activity Detection for Passive Media Consumption
 
