@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Background -->
+  <rect width="512" height="512" fill="white"/>
+
+  <!-- Laptop/Mac - simple line drawing -->
+  <g stroke="black" stroke-width="8" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Laptop screen -->
+    <rect x="60" y="180" width="160" height="110" rx="5"/>
+    <!-- Laptop base -->
+    <path d="M50 290 L70 320 L200 320 L220 290"/>
+    <!-- Laptop keyboard area hint -->
+    <line x1="80" y1="305" x2="190" y2="305"/>
+  </g>
+
+  <!-- Stick figure walking away (to the right) -->
+  <g stroke="black" stroke-width="8" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Head -->
+    <circle cx="380" cy="150" r="35" fill="none"/>
+
+    <!-- Body -->
+    <line x1="380" y1="185" x2="380" y2="290"/>
+
+    <!-- Arms - one forward, one back (walking pose) -->
+    <line x1="380" y1="220" x2="330" y2="260"/>
+    <line x1="380" y1="220" x2="420" y2="190"/>
+
+    <!-- Legs - walking pose -->
+    <line x1="380" y1="290" x2="330" y2="380"/>
+    <line x1="380" y1="290" x2="430" y2="380"/>
+
+    <!-- Feet -->
+    <line x1="330" y1="380" x2="310" y2="380"/>
+    <line x1="430" y1="380" x2="450" y2="380"/>
+  </g>
+
+  <!-- Motion lines (walking away) -->
+  <g stroke="black" stroke-width="4" stroke-linecap="round" opacity="0.6">
+    <line x1="280" y1="200" x2="260" y2="200"/>
+    <line x1="280" y1="240" x2="250" y2="240"/>
+    <line x1="280" y1="280" x2="260" y2="280"/>
+  </g>
+</svg>
