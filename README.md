@@ -18,7 +18,13 @@ A macOS menu bar app that reminds you to take walking breaks. I find that when u
 
 ## Install
 
-Build from source:
+### Download
+
+1. Download the latest DMG from [Releases](https://github.com/the-michael-toy/StepAway/releases/latest)
+2. Open the DMG and drag StepAway to Applications
+3. On first launch, macOS may warn about an unidentified developer - right-click the app and choose "Open" to bypass this
+
+### Build from source
 
 ```bash
 git clone https://github.com/the-michael-toy/StepAway.git
@@ -37,4 +43,6 @@ macOS 12.0 or later
 
 ---
 
-A product of the [Apocalyptic Art Collective](https://apocalypticartcollective.com/)
+A product of the [Apocalyptic Art Collective](https://apocalypticartcollective.com/) | Built with [Claude Code](https://claude.ai/claude-code)
+
+*This software is provided as-is. It was developed with AI assistance. Please review the source code and exercise your own judgment before use.*
