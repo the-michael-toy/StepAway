@@ -13,32 +13,49 @@ class TimerManager {
     private(set) var isPaused: Bool = false
     private(set) var wasTrulyAway: Bool = false  // If true, reset on return instead of resume
 
-    private var timer: Timer?
+    private var timerCancellable: Cancellable?
+    private let timeProvider: TimeProvider
+    private let settingsProvider: () -> (timerInterval: TimeInterval, isEnabled: Bool)
 
-    init() {
-        timeRemaining = AppSettings.shared.timerInterval
-        isEnabled = AppSettings.shared.isEnabled
+    /// Production initializer - uses real time and AppSettings
+    convenience init() {
+        self.init(
+            timeProvider: RealTimeProvider(),
+            settingsProvider: { (AppSettings.shared.timerInterval, AppSettings.shared.isEnabled) }
+        )
+    }
+
+    /// Testable initializer - allows injecting mock time and settings
+    init(timeProvider: TimeProvider, settingsProvider: @escaping () -> (timerInterval: TimeInterval, isEnabled: Bool)) {
+        self.timeProvider = timeProvider
+        self.settingsProvider = settingsProvider
+
+        let settings = settingsProvider()
+        timeRemaining = settings.timerInterval
+        isEnabled = settings.isEnabled
+
         if isEnabled {
             startTimer()
         }
     }
 
     func startTimer() {
-        timer?.invalidate()
+        timerCancellable?.cancel()
 
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+        timerCancellable = timeProvider.scheduleTimer(interval: 1.0, repeats: true) { [weak self] in
             self?.tick()
         }
     }
 
     func stop() {
-        timer?.invalidate()
-        timer = nil
+        timerCancellable?.cancel()
+        timerCancellable = nil
     }
 
     func reset() {
-        timeRemaining = AppSettings.shared.timerInterval
+        timeRemaining = settingsProvider().timerInterval
         isPaused = false
+        wasTrulyAway = false
         if isEnabled {
             startTimer()
         }
@@ -98,7 +115,7 @@ class TimerManager {
         timeRemaining -= 1
 
         if timeRemaining <= 0 {
-            timer?.invalidate()
+            timerCancellable?.cancel()
             onTimerComplete?()
         } else {
             onTick?(timeRemaining)

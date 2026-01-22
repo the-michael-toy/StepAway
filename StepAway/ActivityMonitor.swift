@@ -8,27 +8,39 @@ class ActivityMonitor {
     var onActivityDetected: (() -> Void)?
     var onIdleCheckNeeded: (() -> Void)?  // Called when idle timeout reached, to show "still there?" dialog
 
-    private var eventMonitor: Any?
-    private var idleTimer: Timer?
-    private var isIdle = false
-    private var isCheckingStillThere = false  // True while "still there?" dialog is shown
-    private var lastActivityTime = Date()
+    private(set) var isIdle = false
+    private(set) var isCheckingStillThere = false  // True while "still there?" dialog is shown
+
+    private var idleTimerCancellable: Cancellable?
+    private let timeProvider: TimeProvider
+    private var activitySource: ActivitySource
+    private let settingsProvider: () -> TimeInterval  // Returns idle interval
+
+    private var lastActivityTime: Date
+
+    /// Production initializer - uses real activity source and AppSettings
+    convenience init() {
+        self.init(
+            timeProvider: RealTimeProvider(),
+            activitySource: RealActivitySource(),
+            settingsProvider: { AppSettings.shared.idleInterval }
+        )
+    }
+
+    /// Testable initializer - allows injecting mocks
+    init(timeProvider: TimeProvider, activitySource: ActivitySource, settingsProvider: @escaping () -> TimeInterval) {
+        self.timeProvider = timeProvider
+        self.activitySource = activitySource
+        self.settingsProvider = settingsProvider
+        self.lastActivityTime = timeProvider.now
+    }
 
     func startMonitoring() {
-        // Monitor global events (mouse movement, key presses, etc.)
-        eventMonitor = NSEvent.addGlobalMonitorForEvents(
-            matching: [.mouseMoved, .leftMouseDown, .rightMouseDown, .keyDown, .scrollWheel]
-        ) { [weak self] _ in
+        // Set up activity source callback
+        activitySource.onActivity = { [weak self] in
             self?.activityDetected()
         }
-
-        // Also monitor local events within our app
-        NSEvent.addLocalMonitorForEvents(
-            matching: [.mouseMoved, .leftMouseDown, .rightMouseDown, .keyDown, .scrollWheel]
-        ) { [weak self] event in
-            self?.activityDetected()
-            return event
-        }
+        activitySource.startMonitoring()
 
         // Start the idle check timer
         startIdleCheckTimer()
@@ -38,12 +50,9 @@ class ActivityMonitor {
     }
 
     func stopMonitoring() {
-        if let monitor = eventMonitor {
-            NSEvent.removeMonitor(monitor)
-            eventMonitor = nil
-        }
-        idleTimer?.invalidate()
-        idleTimer = nil
+        activitySource.stopMonitoring()
+        idleTimerCancellable?.cancel()
+        idleTimerCancellable = nil
     }
 
     func updateIdleInterval() {
@@ -52,16 +61,16 @@ class ActivityMonitor {
     }
 
     private func startIdleCheckTimer() {
-        idleTimer?.invalidate()
+        idleTimerCancellable?.cancel()
 
         // Check for idle every second
-        idleTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+        idleTimerCancellable = timeProvider.scheduleTimer(interval: 1.0, repeats: true) { [weak self] in
             self?.checkIdleState()
         }
     }
 
     private func activityDetected() {
-        lastActivityTime = Date()
+        lastActivityTime = timeProvider.now
 
         if isCheckingStillThere {
             // User responded during the "still there?" check - they're present
@@ -78,8 +87,8 @@ class ActivityMonitor {
         // Don't trigger another check while one is in progress
         guard !isCheckingStillThere else { return }
 
-        let idleTime = Date().timeIntervalSince(lastActivityTime)
-        let idleThreshold = AppSettings.shared.idleInterval
+        let idleTime = timeProvider.now.timeIntervalSince(lastActivityTime)
+        let idleThreshold = settingsProvider()
 
         if idleTime >= idleThreshold && !isIdle {
             // Instead of marking idle immediately, trigger the "still there?" check
@@ -92,12 +101,17 @@ class ActivityMonitor {
     func userConfirmedPresent() {
         isCheckingStillThere = false
         isIdle = false
-        lastActivityTime = Date()
+        lastActivityTime = timeProvider.now
     }
 
     /// Called when user didn't respond - they're truly away
     func userConfirmedAway() {
         isCheckingStillThere = false
         isIdle = true
+    }
+
+    /// For testing: simulate activity
+    func simulateActivity() {
+        activityDetected()
     }
 }

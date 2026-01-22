@@ -60,3 +60,6 @@ playground.xcworkspace
 
 # Archives
 *.xcarchive
+
+# Release builds
+*.dmg

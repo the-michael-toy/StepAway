@@ -47,7 +47,7 @@ A macOS menu bar app that reminds you to take walking breaks.
 - Settings persisted via UserDefaults
 - Launch at login uses SMAppService (macOS 13+)
 - Minimum deployment target: macOS 12.0
-- Bundle ID: `com.stepaway.app`
+- Bundle ID: `io.github.the-michael-toy.StepAway`
 
 ## Project Structure
 

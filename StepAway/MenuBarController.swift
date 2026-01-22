@@ -61,9 +61,20 @@ class MenuBarController: NSObject {
             self?.handleActivityDetected()
         }
         activityMonitor.onIdleCheckNeeded = { [weak self] in
-            self?.showStillThereWindow()
+            self?.handleIdleCheckNeeded()
         }
         activityMonitor.startMonitoring()
+    }
+
+    private func handleIdleCheckNeeded() {
+        if AppSettings.shared.showStillThereDialog {
+            showStillThereWindow()
+        } else {
+            // Skip the dialog, directly assume user is away
+            activityMonitor.userConfirmedAway()
+            timerManager.pauseAsTrulyAway()
+            updateButtonTitle(timeRemaining: timerManager.timeRemaining)
+        }
     }
 
     private func handleActivityDetected() {
@@ -311,7 +322,7 @@ class MenuBarController: NSObject {
             }
         } else {
             // Fallback for older macOS versions
-            let launcherAppId = "com.stepaway.launcher"
+            let launcherAppId = "io.github.the-michael-toy.StepAway.launcher"
             SMLoginItemSetEnabled(launcherAppId as CFString, newState)
         }
     }
@@ -403,7 +414,11 @@ class MenuBarController: NSObject {
 
         // Warning sound and flash 10 seconds before auto-dismiss
         stillThereWarningTimer = Timer.scheduledTimer(withTimeInterval: 50.0, repeats: false) { [weak self] _ in
-            NSSound(named: "Glass")?.play()
+            // Play warning sound if enabled
+            if AppSettings.shared.playWarningSound {
+                let soundName = AppSettings.shared.warningSound
+                NSSound(named: NSSound.Name(soundName))?.play()
+            }
 
             // Flash the window background
             if let window = self?.stillThereWindow, let contentView = window.contentView {

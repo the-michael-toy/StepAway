@@ -13,6 +13,9 @@ class AppSettings {
         static let idleInterval = "idleInterval"
         static let launchAtLogin = "launchAtLogin"
         static let isEnabled = "isEnabled"
+        static let showStillThereDialog = "showStillThereDialog"
+        static let playWarningSound = "playWarningSound"
+        static let warningSound = "warningSound"
     }
 
     var timerInterval: TimeInterval {
@@ -54,6 +57,39 @@ class AppSettings {
         }
         set {
             defaults.set(newValue, forKey: Keys.isEnabled)
+        }
+    }
+
+    var showStillThereDialog: Bool {
+        get {
+            if defaults.object(forKey: Keys.showStillThereDialog) == nil {
+                return true
+            }
+            return defaults.bool(forKey: Keys.showStillThereDialog)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.showStillThereDialog)
+        }
+    }
+
+    var playWarningSound: Bool {
+        get {
+            if defaults.object(forKey: Keys.playWarningSound) == nil {
+                return true
+            }
+            return defaults.bool(forKey: Keys.playWarningSound)
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.playWarningSound)
+        }
+    }
+
+    var warningSound: String {
+        get {
+            return defaults.string(forKey: Keys.warningSound) ?? "Glass"
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.warningSound)
         }
     }
 

@@ -1,5 +1,15 @@
 # Changelog
 
+## Version 1.1
+
+- Added Settings window with help tooltips for each option
+- Added option to disable "Still there?" confirmation dialog
+- Added configurable warning sound with sound picker and test button
+- Added settings validation: sliders auto-adjust to prevent nonsensical configurations
+- Added comprehensive test suite (21 tests)
+- Added build-dmg.sh script for creating release DMGs
+- Changed bundle identifier to io.github.the-michael-toy.StepAway
+
 ## Version 1.01
 
 - Fixed crash caused by About window use-after-free during close animation
