@@ -17,6 +17,7 @@ class MenuBarController: NSObject {
     private var settingsWindowController: SettingsWindowController?
     private var stillThereWindow: NSWindow?
     private var stillThereTimer: Timer?
+    private var stillThereWarningTimer: Timer?
     private var aboutWindow: NSWindow?
 
     private var isRunningFromApplications: Bool {
@@ -220,7 +221,8 @@ class MenuBarController: NSObject {
         contentView.addSubview(titleLabel)
 
         // Version
-        let versionLabel = NSTextField(labelWithString: "Version 1.0")
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+        let versionLabel = NSTextField(labelWithString: "Version \(version)")
         versionLabel.font = NSFont.systemFont(ofSize: 12)
         versionLabel.textColor = .secondaryLabelColor
         versionLabel.frame = NSRect(x: 100, y: 135, width: 220, height: 16)
@@ -334,8 +336,40 @@ class MenuBarController: NSObject {
             defer: false
         )
         window.title = "StepAway"
-        window.center()
         window.isReleasedWhenClosed = false
+        window.level = .floating
+
+        // Position near the mouse cursor, staying on screen
+        let mouseLocation = NSEvent.mouseLocation
+        if let screen = NSScreen.screens.first(where: { NSMouseInRect(mouseLocation, $0.frame, false) }) {
+            let screenFrame = screen.visibleFrame
+            let windowSize = window.frame.size
+            let padding: CGFloat = 20
+
+            // Prefer left of cursor, fall back to right
+            var x: CGFloat
+            if mouseLocation.x - windowSize.width - padding >= screenFrame.minX {
+                x = mouseLocation.x - windowSize.width - padding
+            } else {
+                x = mouseLocation.x + padding
+            }
+            // Clamp to screen bounds
+            x = max(screenFrame.minX, min(x, screenFrame.maxX - windowSize.width))
+
+            // Prefer above cursor, fall back to below
+            var y: CGFloat
+            if mouseLocation.y + padding + windowSize.height <= screenFrame.maxY {
+                y = mouseLocation.y + padding
+            } else {
+                y = mouseLocation.y - windowSize.height - padding
+            }
+            // Clamp to screen bounds
+            y = max(screenFrame.minY, min(y, screenFrame.maxY - windowSize.height))
+
+            window.setFrameOrigin(NSPoint(x: x, y: y))
+        } else {
+            window.center()
+        }
 
         // Create the content
         let contentView = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 140))
@@ -367,6 +401,20 @@ class MenuBarController: NSObject {
 
         stillThereWindow = window
 
+        // Warning sound and flash 10 seconds before auto-dismiss
+        stillThereWarningTimer = Timer.scheduledTimer(withTimeInterval: 50.0, repeats: false) { [weak self] _ in
+            NSSound(named: "Glass")?.play()
+
+            // Flash the window background
+            if let window = self?.stillThereWindow, let contentView = window.contentView {
+                contentView.wantsLayer = true
+                contentView.layer?.backgroundColor = NSColor.systemYellow.cgColor
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    contentView.layer?.backgroundColor = nil
+                }
+            }
+        }
+
         // Start 60-second timer
         stillThereTimer = Timer.scheduledTimer(withTimeInterval: 60.0, repeats: false) { [weak self] _ in
             self?.dismissStillThereWindow(userIsPresent: false)
@@ -376,6 +424,8 @@ class MenuBarController: NSObject {
     private func dismissStillThereWindow(userIsPresent: Bool) {
         stillThereTimer?.invalidate()
         stillThereTimer = nil
+        stillThereWarningTimer?.invalidate()
+        stillThereWarningTimer = nil
 
         stillThereWindow?.close()
         stillThereWindow = nil
