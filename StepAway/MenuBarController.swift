@@ -17,6 +17,7 @@ class MenuBarController: NSObject {
     private var settingsWindowController: SettingsWindowController?
     private var stillThereWindow: NSWindow?
     private var stillThereTimer: Timer?
+    private var aboutWindow: NSWindow?
 
     private var isRunningFromApplications: Bool {
         let bundlePath = Bundle.main.bundlePath
@@ -187,6 +188,13 @@ class MenuBarController: NSObject {
     }
 
     @objc private func showAbout() {
+        // Reuse existing window if open
+        if let existingWindow = aboutWindow, existingWindow.isVisible {
+            existingWindow.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 340, height: 190),
             styleMask: [.titled, .closable],
@@ -195,7 +203,7 @@ class MenuBarController: NSObject {
         )
         window.title = "About StepAway"
         window.center()
-        window.isReleasedWhenClosed = true
+        window.isReleasedWhenClosed = false
 
         let contentView = NSView(frame: NSRect(x: 0, y: 0, width: 340, height: 190))
 
@@ -267,6 +275,8 @@ class MenuBarController: NSObject {
         window.contentView = contentView
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+
+        aboutWindow = window
     }
 
     @objc private func openRepo() {
