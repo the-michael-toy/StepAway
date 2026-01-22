@@ -3,7 +3,7 @@
 <td valign="top"><h1>StepAway</h1></td>
 </tr></table>
 
-A macOS menu bar app that reminds you to take walking breaks. It was entirely written by [Claude](https://claude.ai). I find that when using an AI it is too easy to forget to do this. I welcome contributions (like a better icon).
+A macOS menu bar app that reminds you to take walking breaks. I find that when using an AI it is too easy to forget to do this. It was entirely written by [Claude](https://claude.ai).  I welcome contributions (like a better icon).
 
 ![StepAway Alert](step-away-activated.png)
 
