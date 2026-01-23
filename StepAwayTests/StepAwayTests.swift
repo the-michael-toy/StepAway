@@ -61,6 +61,7 @@ struct StepAwayTests {
         // Setup
         let mockTime = MockTimeProvider()
         let mockActivity = MockActivitySource()
+        mockActivity.setTimeProvider(mockTime)
         let idleInterval: TimeInterval = 3.0  // 3 seconds for testing
 
         let activityMonitor = ActivityMonitor(
@@ -88,6 +89,7 @@ struct StepAwayTests {
         // Setup
         let mockTime = MockTimeProvider()
         let mockActivity = MockActivitySource()
+        mockActivity.setTimeProvider(mockTime)
         let idleInterval: TimeInterval = 3.0
 
         let activityMonitor = ActivityMonitor(
@@ -105,11 +107,11 @@ struct StepAwayTests {
 
         // Act: Advance 1 second, simulate activity, advance 1 second, simulate activity, etc.
         mockTime.advance(by: 1.0)
-        activityMonitor.simulateActivity()
+        mockActivity.simulateActivity()
         mockTime.advance(by: 1.0)
-        activityMonitor.simulateActivity()
+        mockActivity.simulateActivity()
         mockTime.advance(by: 1.0)
-        activityMonitor.simulateActivity()
+        mockActivity.simulateActivity()
         mockTime.advance(by: 1.0)
 
         // Assert
@@ -122,6 +124,7 @@ struct StepAwayTests {
         // Setup
         let mockTime = MockTimeProvider()
         let mockActivity = MockActivitySource()
+        mockActivity.setTimeProvider(mockTime)
         let idleInterval: TimeInterval = 3.0
 
         let activityMonitor = ActivityMonitor(
@@ -142,7 +145,9 @@ struct StepAwayTests {
         #expect(activityMonitor.isCheckingStillThere, "Should be in 'checking still there' state")
 
         // Act: Simulate activity while in "still there" state
-        activityMonitor.simulateActivity()
+        mockActivity.simulateActivity()
+        // Advance enough for the polling timer to fire and detect the activity
+        mockTime.advance(by: 1.0)
 
         // Assert
         #expect(activityDetectedCalled, "Activity detected callback should be called")
@@ -176,6 +181,7 @@ struct StepAwayTests {
         // Setup
         let mockTime = MockTimeProvider()
         let mockActivity = MockActivitySource()
+        mockActivity.setTimeProvider(mockTime)
         var idleInterval: TimeInterval = 10.0  // 10 seconds - long
 
         let activityMonitor = ActivityMonitor(
@@ -197,7 +203,7 @@ struct StepAwayTests {
 
         // Act: Change idle interval to 3 seconds and trigger activity to reset
         idleInterval = 3.0
-        activityMonitor.simulateActivity()
+        mockActivity.simulateActivity()
 
         // Now wait 4 seconds - should trigger with new 3 second threshold
         mockTime.advance(by: 4.0)
@@ -291,6 +297,7 @@ struct StepAwayTests {
 
         let mockTime = MockTimeProvider()
         let mockActivity = MockActivitySource()
+        mockActivity.setTimeProvider(mockTime)
         let timerInterval: TimeInterval = 60.0
         let idleInterval: TimeInterval = 5.0
 
@@ -336,8 +343,8 @@ struct StepAwayTests {
         #expect(timerManager.timeRemaining == timeBeforeAway, "Timer should be paused while away")
 
         // Step 5: User returns (activity detected)
-        activityMonitor.simulateActivity()
-        timerManager.resumeIfNeeded()
+        mockActivity.simulateActivity()
+        mockTime.advance(by: 1.0)  // Let polling timer fire and detect the activity
 
         // Step 6: Timer should reset to full interval (user took a break)
         #expect(timerManager.timeRemaining == 60.0, "Timer should reset after returning from away")
@@ -391,7 +398,7 @@ struct StepAwayTests {
         var completionCount = 0
         timerManager.onTimerComplete = {
             completionCount += 1
-            timerManager.reset()  // Simulate user clicking "OK, I'll Walk!"
+            timerManager.reset()  // Simulate snooze completing and user clicking OK
         }
 
         // First completion
@@ -458,6 +465,7 @@ struct StepAwayTests {
     @Test func activityDuringNormalCountdownDoesNotInterfere() {
         let mockTime = MockTimeProvider()
         let mockActivity = MockActivitySource()
+        mockActivity.setTimeProvider(mockTime)
         let timerInterval: TimeInterval = 60.0
         let idleInterval: TimeInterval = 10.0
 
@@ -481,9 +489,9 @@ struct StepAwayTests {
 
         // Simulate normal usage with activity
         mockTime.advance(by: 5.0)
-        activityMonitor.simulateActivity()
+        mockActivity.simulateActivity()
         mockTime.advance(by: 5.0)
-        activityMonitor.simulateActivity()
+        mockActivity.simulateActivity()
         mockTime.advance(by: 5.0)
 
         // Timer should have counted down normally (15 seconds total)
@@ -519,6 +527,7 @@ struct StepAwayTests {
     @Test func veryShortIdleIntervalWorksCorrectly() {
         let mockTime = MockTimeProvider()
         let mockActivity = MockActivitySource()
+        mockActivity.setTimeProvider(mockTime)
         let idleInterval: TimeInterval = 1.0  // 1 second
 
         let activityMonitor = ActivityMonitor(
@@ -544,6 +553,7 @@ struct StepAwayTests {
 
         let mockTime = MockTimeProvider()
         let mockActivity = MockActivitySource()
+        mockActivity.setTimeProvider(mockTime)
         let timerInterval: TimeInterval = 10.0   // Short reminder
         let idleInterval: TimeInterval = 30.0    // Long idle timeout
 
@@ -582,16 +592,17 @@ struct StepAwayTests {
 
     // MARK: - Bug: Idle detection while walk alert is showing
 
-    @Test func idleDetectedWhileWalkAlertShowingShouldResetTimer() {
+    @Test func idleDetectedWhileWalkAlertShowingShouldPauseTimer() {
         // Bug scenario:
         // 1. Timer reaches 0, walk alert shows ("Time to Step Away!")
         // 2. User walks away without clicking anything
         // 3. Idle timer fires (no activity detected)
-        // 4. EXPECTED: App should assume user stepped away and reset the timer
-        // 5. ACTUAL (bug): Alert stays up, timer doesn't reset
+        // 4. EXPECTED: App should assume user stepped away, dismiss alert, pause timer
+        // 5. When user returns, timer resets
 
         let mockTime = MockTimeProvider()
         let mockActivity = MockActivitySource()
+        mockActivity.setTimeProvider(mockTime)
         let timerInterval: TimeInterval = 10.0
         let idleInterval: TimeInterval = 15.0  // Longer than timer so walk alert shows first
 
@@ -618,7 +629,8 @@ struct StepAwayTests {
             if walkAlertShowing {
                 // User went idle while walk alert showing - they already stepped away!
                 walkAlertShowing = false  // Simulate dismissing the alert (NSApp.stopModal())
-                timerManager.reset()
+                activityMonitor.userConfirmedAway()
+                timerManager.pauseAsTrulyAway()
                 return
             }
             // Normal "still there?" handling would go here
@@ -638,11 +650,68 @@ struct StepAwayTests {
         // Step 2: User walks away - more time passes, idle is detected while walk alert is showing
         mockTime.advance(by: 6.0)  // Total 16 seconds, exceeds 15 second idle threshold
 
-        // Step 3: Verify EXPECTED behavior
-        // When idle is detected while walk alert is showing, the app should:
-        // - Auto-dismiss the walk alert (user already stepped away!)
-        // - Reset the timer to full interval
+        // Step 3: Verify alert dismissed and timer paused
         #expect(!walkAlertShowing, "Walk alert should be auto-dismissed when user goes idle")
-        #expect(timerManager.timeRemaining == timerInterval, "Timer should reset when user stepped away during walk alert")
+        #expect(timerManager.isPaused, "Timer should be paused")
+        #expect(timerManager.wasTrulyAway, "Timer should be marked as truly away")
+
+        // Step 4: User returns - timer should reset
+        mockActivity.simulateActivity()
+        mockTime.advance(by: 1.0)  // Let polling timer detect activity
+
+        #expect(timerManager.timeRemaining == timerInterval, "Timer should reset when user returns")
+        #expect(!timerManager.isPaused, "Timer should not be paused after return")
+    }
+
+    @Test func clickingOkIllWalkPausesTimerUntilReturn() {
+        // Test the "OK, I'll Walk!" button behavior:
+        // 1. Timer fires, walk alert shows
+        // 2. User clicks "OK, I'll Walk!" - timer pauses
+        // 3. User returns - timer resets
+
+        let mockTime = MockTimeProvider()
+        let mockActivity = MockActivitySource()
+        mockActivity.setTimeProvider(mockTime)
+        let timerInterval: TimeInterval = 10.0
+        let idleInterval: TimeInterval = 5.0
+
+        let timerManager = TimerManager(
+            timeProvider: mockTime,
+            settingsProvider: { (timerInterval, true) }
+        )
+
+        let activityMonitor = ActivityMonitor(
+            timeProvider: mockTime,
+            activitySource: mockActivity,
+            settingsProvider: { idleInterval }
+        )
+
+        activityMonitor.onActivityDetected = {
+            timerManager.resumeIfNeeded()
+        }
+
+        activityMonitor.startMonitoring()
+
+        // Timer counts down to 0
+        mockTime.advance(by: 10.0)
+        #expect(timerManager.timeRemaining <= 0, "Timer should have expired")
+
+        // User clicks "OK, I'll Walk!" - simulated by pausing as truly away
+        activityMonitor.userConfirmedAway()
+        timerManager.pauseAsTrulyAway()
+
+        #expect(timerManager.isPaused, "Timer should be paused after clicking OK")
+        #expect(timerManager.wasTrulyAway, "Timer should be marked as truly away")
+
+        // Time passes while user is away
+        mockTime.advance(by: 100.0)
+        #expect(timerManager.isPaused, "Timer should remain paused while away")
+
+        // User returns
+        mockActivity.simulateActivity()
+        mockTime.advance(by: 1.0)
+
+        #expect(timerManager.timeRemaining == timerInterval, "Timer should reset to full interval on return")
+        #expect(!timerManager.isPaused, "Timer should be running after return")
     }
 }

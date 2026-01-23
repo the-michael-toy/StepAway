@@ -18,11 +18,19 @@ class MenuBarController: NSObject {
     private var stillThereWindow: NSWindow?
     private var stillThereTimer: Timer?
     private var stillThereWarningTimer: Timer?
+    private var stillThereProgressTimer: Timer?
+    private var stillThereProgressBar: NSProgressIndicator?
     private var aboutWindow: NSWindow?
 
     // Walk alert state
     private var isWalkAlertShowing = false
     private var walkAlertDismissedDueToIdle = false
+
+    // Grace period after clicking "OK, I'll Walk!" - ignore activity until this time
+    private var activityGraceUntil: Date?
+
+    // Track previous app to restore focus
+    private var previousActiveApp: NSRunningApplication?
 
     private var isRunningFromApplications: Bool {
         let bundlePath = Bundle.main.bundlePath
@@ -71,11 +79,18 @@ class MenuBarController: NSObject {
     }
 
     private func handleIdleCheckNeeded() {
+        // If already paused as away, don't show "Still there?" - we know they're away
+        if timerManager.wasTrulyAway {
+            return
+        }
+
         // If walk alert is showing and user went idle, they already stepped away!
-        // Dismiss the alert and reset the timer.
+        // Dismiss the alert and pause the timer (same as clicking "OK, I'll Walk!").
         if isWalkAlertShowing {
             walkAlertDismissedDueToIdle = true
-            timerManager.reset()
+            activityMonitor.userConfirmedAway()  // Mark as away
+            timerManager.pauseAsTrulyAway()      // Pause timer until they return
+            updateButtonTitle(timeRemaining: timerManager.timeRemaining)
             NSApp.stopModal()
             return
         }
@@ -91,6 +106,14 @@ class MenuBarController: NSObject {
     }
 
     private func handleActivityDetected() {
+        // Ignore activity during grace period (right after clicking "OK, I'll Walk!")
+        if let graceUntil = activityGraceUntil, Date() < graceUntil {
+            // Re-confirm away state since activity monitor resets it when it sees activity
+            activityMonitor.userConfirmedAway()
+            return
+        }
+        activityGraceUntil = nil
+
         if stillThereWindow != nil {
             // Activity while "still there?" window is showing - user is present
             dismissStillThereWindow(userIsPresent: true)
@@ -383,6 +406,9 @@ class MenuBarController: NSObject {
     private func showStillThereWindow() {
         guard stillThereWindow == nil else { return }
 
+        // Save the currently active app so we can restore focus later
+        previousActiveApp = NSWorkspace.shared.frontmostApplication
+
         // Create a simple window
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 300, height: 140),
@@ -437,16 +463,26 @@ class MenuBarController: NSObject {
         let titleLabel = NSTextField(labelWithString: "Still there?")
         titleLabel.font = NSFont.boldSystemFont(ofSize: 18)
         titleLabel.alignment = .center
-        titleLabel.frame = NSRect(x: 20, y: 50, width: 260, height: 30)
+        titleLabel.frame = NSRect(x: 20, y: 55, width: 260, height: 30)
+
+        // Progress bar (fills over 60 seconds)
+        let progressBar = NSProgressIndicator(frame: NSRect(x: 20, y: 42, width: 260, height: 6))
+        progressBar.style = .bar
+        progressBar.isIndeterminate = false
+        progressBar.minValue = 0
+        progressBar.maxValue = 60
+        progressBar.doubleValue = 0
+        stillThereProgressBar = progressBar
 
         let subtitleLabel = NSTextField(labelWithString: "Move the mouse or press any key.")
         subtitleLabel.font = NSFont.systemFont(ofSize: 13)
         subtitleLabel.textColor = .secondaryLabelColor
         subtitleLabel.alignment = .center
-        subtitleLabel.frame = NSRect(x: 20, y: 25, width: 260, height: 20)
+        subtitleLabel.frame = NSRect(x: 20, y: 18, width: 260, height: 20)
 
         contentView.addSubview(iconView)
         contentView.addSubview(titleLabel)
+        contentView.addSubview(progressBar)
         contentView.addSubview(subtitleLabel)
         window.contentView = contentView
 
@@ -478,6 +514,13 @@ class MenuBarController: NSObject {
         stillThereTimer = Timer.scheduledTimer(withTimeInterval: 60.0, repeats: false) { [weak self] _ in
             self?.dismissStillThereWindow(userIsPresent: false)
         }
+
+        // Update progress bar smoothly (10 times per second)
+        stillThereProgressTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            if let progressBar = self?.stillThereProgressBar {
+                progressBar.doubleValue += 0.1
+            }
+        }
     }
 
     private func dismissStillThereWindow(userIsPresent: Bool) {
@@ -485,9 +528,18 @@ class MenuBarController: NSObject {
         stillThereTimer = nil
         stillThereWarningTimer?.invalidate()
         stillThereWarningTimer = nil
+        stillThereProgressTimer?.invalidate()
+        stillThereProgressTimer = nil
+        stillThereProgressBar = nil
 
         stillThereWindow?.close()
         stillThereWindow = nil
+
+        // Restore focus to the previously active app
+        if let previousApp = previousActiveApp {
+            previousApp.activate()
+            previousActiveApp = nil
+        }
 
         if userIsPresent {
             // User confirmed present - keep timer running, don't pause
@@ -501,6 +553,15 @@ class MenuBarController: NSObject {
     }
 
     private func showWalkAlert() {
+        // Set flag immediately to prevent race with idle timer
+        isWalkAlertShowing = true
+        walkAlertDismissedDueToIdle = false
+
+        // Dismiss "Still there?" if showing - walk alert takes priority
+        if stillThereWindow != nil {
+            dismissStillThereWindow(userIsPresent: true)
+        }
+
         DispatchQueue.main.async {
             let alert = NSAlert()
             alert.messageText = "Time to Step Away!"
@@ -511,10 +572,6 @@ class MenuBarController: NSObject {
 
             // Bring app to front for the alert
             NSApp.activate(ignoringOtherApps: true)
-
-            // Track that walk alert is showing
-            self.isWalkAlertShowing = true
-            self.walkAlertDismissedDueToIdle = false
 
             let response = alert.runModal()
 
@@ -531,8 +588,11 @@ class MenuBarController: NSObject {
                 // Snooze - set a 5 minute timer
                 self.timerManager.snooze(minutes: 5)
             } else {
-                // Reset the timer
-                self.timerManager.reset()
+                // User is going for a walk - pause timer until they return
+                // Grace period so the button click doesn't count as "returned"
+                self.activityGraceUntil = Date().addingTimeInterval(3.0)
+                self.activityMonitor.userConfirmedAway()
+                self.timerManager.pauseAsTrulyAway()
             }
             self.updateButtonTitle(timeRemaining: self.timerManager.timeRemaining)
         }

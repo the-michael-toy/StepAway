@@ -16,8 +16,6 @@ class ActivityMonitor {
     private var activitySource: ActivitySource
     private let settingsProvider: () -> TimeInterval  // Returns idle interval
 
-    private var lastActivityTime: Date
-
     /// Production initializer - uses real activity source and AppSettings
     convenience init() {
         self.init(
@@ -32,21 +30,13 @@ class ActivityMonitor {
         self.timeProvider = timeProvider
         self.activitySource = activitySource
         self.settingsProvider = settingsProvider
-        self.lastActivityTime = timeProvider.now
     }
 
     func startMonitoring() {
-        // Set up activity source callback
-        activitySource.onActivity = { [weak self] in
-            self?.activityDetected()
-        }
         activitySource.startMonitoring()
 
-        // Start the idle check timer
+        // Start the idle check timer - polls every second
         startIdleCheckTimer()
-
-        // Initial activity
-        activityDetected()
     }
 
     func stopMonitoring() {
@@ -69,31 +59,30 @@ class ActivityMonitor {
         }
     }
 
-    private func activityDetected() {
-        lastActivityTime = timeProvider.now
-
-        if isCheckingStillThere {
-            // User responded during the "still there?" check - they're present
-            isCheckingStillThere = false
-            isIdle = false
-            onActivityDetected?()
-        } else if isIdle {
-            isIdle = false
-            onActivityDetected?()
-        }
-    }
-
     private func checkIdleState() {
-        // Don't trigger another check while one is in progress
-        guard !isCheckingStillThere else { return }
-
-        let idleTime = timeProvider.now.timeIntervalSince(lastActivityTime)
+        let idleTime = activitySource.getIdleTime()
         let idleThreshold = settingsProvider()
 
-        if idleTime >= idleThreshold && !isIdle {
-            // Instead of marking idle immediately, trigger the "still there?" check
-            isCheckingStillThere = true
-            onIdleCheckNeeded?()
+        if isCheckingStillThere {
+            // While showing "still there?" dialog, watch for activity
+            if idleTime <= 1.0 {
+                // Recent activity detected - user is present
+                isCheckingStillThere = false
+                isIdle = false
+                onActivityDetected?()
+            }
+        } else if isIdle {
+            // User was away, check if they returned
+            if idleTime <= 1.0 {
+                isIdle = false
+                onActivityDetected?()
+            }
+        } else {
+            // Normal state - check if user went idle
+            if idleTime >= idleThreshold {
+                isCheckingStillThere = true
+                onIdleCheckNeeded?()
+            }
         }
     }
 
@@ -101,7 +90,6 @@ class ActivityMonitor {
     func userConfirmedPresent() {
         isCheckingStillThere = false
         isIdle = false
-        lastActivityTime = timeProvider.now
     }
 
     /// Called when user didn't respond - they're truly away
@@ -112,6 +100,7 @@ class ActivityMonitor {
 
     /// For testing: simulate activity
     func simulateActivity() {
-        activityDetected()
+        // For tests using MockActivitySource, trigger the onActivity callback
+        activitySource.onActivity?()
     }
 }

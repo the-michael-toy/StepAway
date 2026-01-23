@@ -8,7 +8,8 @@ A macOS menu bar app that reminds you to take walking breaks.
 - Displays a walking person icon (🚶) in the menu bar with a countdown timer
 - Default timer: 90 minutes
 - When timer reaches zero, shows an alert dialog telling the user to take a walk
-- Alert has two options: "OK, I'll Walk!" (resets timer) or "Snooze 5 min"
+- Alert has two options: "OK, I'll Walk!" (pauses timer until return) or "Snooze 5 min"
+- If user goes idle while walk alert is showing, alert auto-dismisses (they already stepped away)
 
 ### Activity Monitoring
 - Monitors mouse movement, clicks, keyboard, and scroll events
@@ -87,9 +88,12 @@ cp -R ~/Library/Developer/Xcode/DerivedData/StepAway-*/Build/Products/Release/St
 
 ## Releasing
 
-1. **Update version** in `StepAway/Info.plist`:
-   - `CFBundleShortVersionString` - the user-visible version (e.g., "1.12")
-   - `CFBundleVersion` - increment the build number
+1. **Update version** in two places:
+   - `StepAway/Info.plist`:
+     - `CFBundleShortVersionString` - the user-visible version (e.g., "1.13")
+     - `CFBundleVersion` - increment the build number
+   - `StepAway.xcodeproj/project.pbxproj`:
+     - `MARKETING_VERSION` - appears twice (Debug and Release), update both
 
 2. **Update CHANGELOG.md** with the new version and changes
 
@@ -118,7 +122,7 @@ cp -R ~/Library/Developer/Xcode/DerivedData/StepAway-*/Build/Products/Release/St
 - App sandbox is disabled to allow global event monitoring for activity detection
 - The `AppSettings` class is named to avoid conflict with SwiftUI's `Settings` scene type
 - License: CC0 1.0 (Public Domain)
-- The walk alert uses `NSAlert.runModal()` which blocks but still allows timers to fire (run loop keeps running). This means idle detection can trigger while the modal is up. Use `NSApp.stopModal()` to dismiss programmatically.
+- The walk alert uses `NSAlert.runModal()` which blocks. For timers to fire during the modal, they must be scheduled on `.common` run loop modes (not just `.default`). Use `NSApp.stopModal()` to dismiss programmatically.
 - When writing tests, be wary of "simulation tests" that implement expected behavior in the test's callback handlers rather than testing the actual production wiring.
 
 ## Architecture Notes
@@ -129,7 +133,8 @@ MenuBarController currently handles both UI concerns AND the coordination logic 
 
 - When idle is detected (`onIdleCheckNeeded`), show "still there?" window OR pause timer
 - When activity is detected (`onActivityDetected`), dismiss "still there?" window OR resume timer
-- When walk alert is showing and idle is detected, auto-dismiss and reset timer (bug fix from Jan 2026)
+- When walk alert is showing and idle is detected, auto-dismiss and pause timer (user already stepped away)
+- Grace period after clicking "OK, I'll Walk!" to prevent the button click from counting as "returned"
 - When timer completes (`onTimerComplete`), show walk alert
 
 This coordination logic is not tested. The existing tests only test TimerManager and ActivityMonitor in isolation - they verify the components work correctly when methods are called, but don't verify the wiring that decides *when* to call those methods.
@@ -178,3 +183,62 @@ With an AppCoordinator, these tests would have caught the Jan 2026 bug:
 3. **Check screen idle time** - Use `CGEventSourceSecondsSinceLastEventType` which some apps update even during video playback
 
 This would allow the timer to keep counting down during passive viewing, which is arguably when you most need a reminder to get up and walk.
+
+## Manual Test Suite
+
+Use short intervals for testing (e.g., 10s walk timer, 5s idle timeout).
+
+### State Table (Reference)
+
+| State | Activity Detected | Idle Timeout Fires | Still-There 60s Expires |
+|-------|-------------------|-------------------|------------------------|
+| **No windows** | Keep timer running | Show "Still there?" | n/a |
+| **Step away window** | User clicks button | Dismiss alert, pause timer | n/a |
+| **Still there window** | Dismiss window, keep timer running | n/a | Mark away, pause timer |
+| **Both windows** | *Invalid state - prevent this* | *Invalid state* | *Invalid state* |
+
+### Tests
+
+1. **Click "OK, I'll Walk!" pauses timer**
+   - Type for 10s → walk alert appears
+   - Click "OK, I'll Walk!"
+   - Expected: Timer shows `--:-- ⏸` (paused)
+
+2. **Walk alert auto-dismisses when idle**
+   - Type for 10s → walk alert appears
+   - Stop all activity, wait 5+ seconds
+   - Expected: Alert auto-dismisses, timer shows `--:-- ⏸`
+
+3. **Return from away restarts timer**
+   - With timer paused (`--:-- ⏸`), start typing
+   - Expected: Timer resets to full interval and starts counting
+
+4. **"Still there?" dismissed by mouse**
+   - Do nothing for 5s → "Still there?" appears
+   - Move mouse
+   - Expected: Window dismisses, timer keeps running (not reset)
+
+5. **"Still there?" dismissed by key press**
+   - Do nothing for 5s → "Still there?" appears
+   - Press a key
+   - Expected: Window dismisses, timer keeps running
+
+6. **"Still there?" auto-dismiss after 60s**
+   - Do nothing for 5s → "Still there?" appears
+   - Wait 60 seconds (watch progress bar fill)
+   - Expected: Warning sound at ~50s (if enabled), window auto-dismisses, timer shows `--:-- ⏸`
+
+7. **Timer shows 0:00 when alert fires**
+   - Watch menu bar countdown
+   - Expected: Shows `0:00` when walk alert appears (not `0:01`)
+
+8. **Snooze works**
+   - Type for 10s → walk alert appears
+   - Click "Snooze 5 min"
+   - Expected: Timer shows 5:00 and counts down
+
+9. **Focus restoration**
+   - Open another app (e.g., iTerm)
+   - Do nothing for 5s → "Still there?" appears
+   - Press key or move mouse to dismiss
+   - Expected: Focus returns to previous app

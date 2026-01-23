@@ -23,9 +23,11 @@ class RealTimeProvider: TimeProvider {
     var now: Date { Date() }
 
     func scheduleTimer(interval: TimeInterval, repeats: Bool, block: @escaping () -> Void) -> Cancellable {
-        let timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: repeats) { _ in
+        let timer = Timer(timeInterval: interval, repeats: repeats) { _ in
             block()
         }
+        // Add to .common modes so timer fires during modal dialogs too
+        RunLoop.current.add(timer, forMode: .common)
         return TimerCancellable(timer: timer)
     }
 }
@@ -128,45 +130,23 @@ protocol ActivitySource {
 
 class RealActivitySource: ActivitySource {
     var onActivity: (() -> Void)?
-    private var globalMonitor: Any?
-    private var localMonitor: Any?
-    private var lastActivityTime = Date()
 
     func startMonitoring() {
-        lastActivityTime = Date()
-
-        globalMonitor = NSEvent.addGlobalMonitorForEvents(
-            matching: [.mouseMoved, .leftMouseDown, .rightMouseDown, .keyDown, .scrollWheel]
-        ) { [weak self] _ in
-            self?.activityDetected()
-        }
-
-        localMonitor = NSEvent.addLocalMonitorForEvents(
-            matching: [.mouseMoved, .leftMouseDown, .rightMouseDown, .keyDown, .scrollWheel]
-        ) { [weak self] event in
-            self?.activityDetected()
-            return event
-        }
+        // No setup needed - we use the system's idle time directly
     }
 
     func stopMonitoring() {
-        if let monitor = globalMonitor {
-            NSEvent.removeMonitor(monitor)
-            globalMonitor = nil
-        }
-        if let monitor = localMonitor {
-            NSEvent.removeMonitor(monitor)
-            localMonitor = nil
-        }
+        // No cleanup needed
     }
 
     func getIdleTime() -> TimeInterval {
-        return Date().timeIntervalSince(lastActivityTime)
-    }
-
-    private func activityDetected() {
-        lastActivityTime = Date()
-        onActivity?()
+        // Use the system's idle time tracking - this is what macOS uses for
+        // screen saver and is more reliable than event monitoring
+        let idleTime = CGEventSource.secondsSinceLastEventType(
+            .combinedSessionState,
+            eventType: CGEventType(rawValue: ~0)!  // All event types
+        )
+        return idleTime
     }
 }
 
@@ -176,10 +156,18 @@ class MockActivitySource: ActivitySource {
     var onActivity: (() -> Void)?
     private var idleTime: TimeInterval = 0
     private(set) var isMonitoring = false
+    private var lastResetTime: Date?
+    private weak var timeProvider: MockTimeProvider?
+
+    /// Set the time provider so idle time advances with mock time
+    func setTimeProvider(_ provider: MockTimeProvider) {
+        self.timeProvider = provider
+        self.lastResetTime = provider.now
+    }
 
     func startMonitoring() {
         isMonitoring = true
-        idleTime = 0
+        lastResetTime = timeProvider?.now ?? Date()
     }
 
     func stopMonitoring() {
@@ -187,16 +175,21 @@ class MockActivitySource: ActivitySource {
     }
 
     func getIdleTime() -> TimeInterval {
+        // If we have a time provider, calculate idle time based on mock time
+        if let provider = timeProvider, let resetTime = lastResetTime {
+            return provider.now.timeIntervalSince(resetTime)
+        }
         return idleTime
     }
 
-    /// Simulate user activity
+    /// Simulate user activity - resets idle time to 0
     func simulateActivity() {
+        lastResetTime = timeProvider?.now ?? Date()
         idleTime = 0
         onActivity?()
     }
 
-    /// Simulate time passing with no activity
+    /// Simulate time passing with no activity (for tests not using MockTimeProvider)
     func simulateIdle(seconds: TimeInterval) {
         idleTime += seconds
     }

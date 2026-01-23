@@ -1,5 +1,17 @@
 # Changelog
 
+## Version 1.13
+
+- Fixed idle detection not seeing keystrokes (switched to CGEventSource system idle time)
+- Fixed focus not restoring to previous app after "Still there?" dialog dismissed
+- Fixed "OK, I'll Walk!" button: now pauses timer until you return (was incorrectly resetting immediately)
+- Walk alert auto-dismisses when user goes idle and pauses timer (previously reset)
+- Fixed timers not firing during modal dialogs (run loop mode)
+- Added progress bar to "Still there?" window showing countdown to auto-dismiss
+- Added 5s and 10s test intervals in settings
+- Added manual test suite documentation
+- Updated automated tests to match new behavior
+
 ## Version 1.12
 
 - Fixed bug: "Time to Step Away" alert now auto-dismisses and timer resets if user goes idle while alert is showing
