@@ -107,10 +107,12 @@ cp -R ~/Library/Developer/Xcode/DerivedData/StepAway-*/Build/Products/Release/St
    ```
    This creates `build/StepAway-X.XX.dmg`
 
-5. **Create GitHub release** at https://github.com/the-michael-toy/StepAway/releases
-   - Use tag vX.XX
-   - Copy release notes from CHANGELOG.md
-   - Attach the DMG file
+5. **Create GitHub release**:
+   ```bash
+   gh auth switch -u the-michael-toy
+   gh release create vX.XX build/StepAway-X.XX.dmg --title "Version X.XX" --notes "paste release notes"
+   gh auth switch -u mtoy-googly-moogly  # switch back
+   ```
 
 ## Notes
 - App sandbox is disabled to allow global event monitoring for activity detection
