@@ -114,7 +114,7 @@ cp -R ~/Library/Developer/Xcode/DerivedData/StepAway-*/Build/Products/Release/St
 5. **Create GitHub release**:
    ```bash
    gh auth switch -u the-michael-toy
-   gh release create vX.XX build/StepAway-X.XX.dmg --title "Version X.XX" --notes "paste release notes"
+   gh release create vX.XX build/StepAway-X.XX.dmg --title "StepAway X.XX" --notes "paste release notes"
    gh auth switch -u mtoy-googly-moogly  # switch back
    ```
 
