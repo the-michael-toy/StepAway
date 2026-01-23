@@ -20,6 +20,10 @@ class MenuBarController: NSObject {
     private var stillThereWarningTimer: Timer?
     private var aboutWindow: NSWindow?
 
+    // Walk alert state
+    private var isWalkAlertShowing = false
+    private var walkAlertDismissedDueToIdle = false
+
     private var isRunningFromApplications: Bool {
         let bundlePath = Bundle.main.bundlePath
         return bundlePath.hasPrefix("/Applications/")
@@ -67,6 +71,15 @@ class MenuBarController: NSObject {
     }
 
     private func handleIdleCheckNeeded() {
+        // If walk alert is showing and user went idle, they already stepped away!
+        // Dismiss the alert and reset the timer.
+        if isWalkAlertShowing {
+            walkAlertDismissedDueToIdle = true
+            timerManager.reset()
+            NSApp.stopModal()
+            return
+        }
+
         if AppSettings.shared.showStillThereDialog {
             showStillThereWindow()
         } else {
@@ -499,7 +512,21 @@ class MenuBarController: NSObject {
             // Bring app to front for the alert
             NSApp.activate(ignoringOtherApps: true)
 
+            // Track that walk alert is showing
+            self.isWalkAlertShowing = true
+            self.walkAlertDismissedDueToIdle = false
+
             let response = alert.runModal()
+
+            self.isWalkAlertShowing = false
+
+            // If alert was dismissed because user went idle, timer is already reset
+            if self.walkAlertDismissedDueToIdle {
+                self.walkAlertDismissedDueToIdle = false
+                self.updateButtonTitle(timeRemaining: self.timerManager.timeRemaining)
+                return
+            }
+
             if response == .alertSecondButtonReturn {
                 // Snooze - set a 5 minute timer
                 self.timerManager.snooze(minutes: 5)

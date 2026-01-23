@@ -113,12 +113,11 @@ class TimerManager {
         guard isEnabled && !isPaused else { return }
 
         timeRemaining -= 1
+        onTick?(timeRemaining)
 
         if timeRemaining <= 0 {
             timerCancellable?.cancel()
             onTimerComplete?()
-        } else {
-            onTick?(timeRemaining)
         }
     }
 }

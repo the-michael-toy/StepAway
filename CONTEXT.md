@@ -85,10 +85,84 @@ xcodebuild -project StepAway.xcodeproj -scheme StepAway -configuration Release b
 cp -R ~/Library/Developer/Xcode/DerivedData/StepAway-*/Build/Products/Release/StepAway.app /Applications/
 ```
 
+## Releasing
+
+1. **Update version** in `StepAway/Info.plist`:
+   - `CFBundleShortVersionString` - the user-visible version (e.g., "1.12")
+   - `CFBundleVersion` - increment the build number
+
+2. **Update CHANGELOG.md** with the new version and changes
+
+3. **Commit and tag**:
+   ```bash
+   git add -A
+   git commit -m "Version X.XX: summary of changes"
+   git tag vX.XX
+   git push && git push --tags
+   ```
+
+4. **Build DMG**:
+   ```bash
+   ./build-dmg.sh
+   ```
+   This creates `build/StepAway-X.XX.dmg`
+
+5. **Create GitHub release** at https://github.com/the-michael-toy/StepAway/releases
+   - Use tag vX.XX
+   - Copy release notes from CHANGELOG.md
+   - Attach the DMG file
+
 ## Notes
 - App sandbox is disabled to allow global event monitoring for activity detection
 - The `AppSettings` class is named to avoid conflict with SwiftUI's `Settings` scene type
 - License: CC0 1.0 (Public Domain)
+- The walk alert uses `NSAlert.runModal()` which blocks but still allows timers to fire (run loop keeps running). This means idle detection can trigger while the modal is up. Use `NSApp.stopModal()` to dismiss programmatically.
+- When writing tests, be wary of "simulation tests" that implement expected behavior in the test's callback handlers rather than testing the actual production wiring.
+
+## Architecture Notes
+
+### MenuBarController Coordination Logic
+
+MenuBarController currently handles both UI concerns AND the coordination logic between TimerManager and ActivityMonitor. This coordination logic includes:
+
+- When idle is detected (`onIdleCheckNeeded`), show "still there?" window OR pause timer
+- When activity is detected (`onActivityDetected`), dismiss "still there?" window OR resume timer
+- When walk alert is showing and idle is detected, auto-dismiss and reset timer (bug fix from Jan 2026)
+- When timer completes (`onTimerComplete`), show walk alert
+
+This coordination logic is not tested. The existing tests only test TimerManager and ActivityMonitor in isolation - they verify the components work correctly when methods are called, but don't verify the wiring that decides *when* to call those methods.
+
+### Future: Extract AppCoordinator
+
+To make the coordination logic testable, extract it from MenuBarController into an `AppCoordinator` class:
+
+```swift
+class AppCoordinator {
+    let timerManager: TimerManager
+    let activityMonitor: ActivityMonitor
+
+    var onShowWalkAlert: (() -> Void)?
+    var onDismissWalkAlert: (() -> Void)?
+    var onShowStillThereWindow: (() -> Void)?
+    var onDismissStillThereWindow: (() -> Void)?
+    var onUpdateDisplay: ((TimeInterval) -> Void)?
+
+    private(set) var isWalkAlertShowing = false
+    // ... coordination logic here
+}
+```
+
+### Tests That Would Catch Real Bugs
+
+With an AppCoordinator, these tests would have caught the Jan 2026 bug:
+
+1. **`testIdleWhileWalkAlertShowingResetsTimer`** - Trigger timer completion, then trigger idle detection, verify timer resets and `onDismissWalkAlert` is called.
+
+2. **`testFullIdleCycleTriggersCorrectCallbacks`** - Don't manually call methods; instead advance time and verify the coordinator calls the right callbacks in the right order.
+
+3. **`testActivityDuringStillThereWindowDismissesIt`** - Trigger idle, verify `onShowStillThereWindow` called, simulate activity, verify `onDismissStillThereWindow` called.
+
+4. **`testNoResponseToStillTherePausesTimer`** - Trigger idle, wait for timeout, verify timer pauses without manual intervention.
 
 ## Future Improvements
 

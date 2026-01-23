@@ -1,5 +1,12 @@
 # Changelog
 
+## Version 1.12
+
+- Fixed bug: "Time to Step Away" alert now auto-dismisses and timer resets if user goes idle while alert is showing
+- Timer display now shows 0:00 when it fires (instead of 0:01)
+- Removed trivial tests, added architecture notes for future AppCoordinator refactoring
+- Added release instructions to CONTEXT.md
+
 ## Version 1.11
 
 - Added disclaimer to About window noting AI-assisted development

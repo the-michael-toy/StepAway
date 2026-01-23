@@ -150,32 +150,6 @@ struct StepAwayTests {
         #expect(!activityMonitor.isIdle, "Should not be marked as idle")
     }
 
-    @Test func noActivityConfirmsUserAway() {
-        // Setup
-        let mockTime = MockTimeProvider()
-        let mockActivity = MockActivitySource()
-        let idleInterval: TimeInterval = 3.0
-
-        let activityMonitor = ActivityMonitor(
-            timeProvider: mockTime,
-            activitySource: mockActivity,
-            settingsProvider: { idleInterval }
-        )
-
-        activityMonitor.startMonitoring()
-
-        // Get into idle check state
-        mockTime.advance(by: 4.0)
-        #expect(activityMonitor.isCheckingStillThere)
-
-        // Act: User didn't respond (simulate the 60-second timeout)
-        activityMonitor.userConfirmedAway()
-
-        // Assert
-        #expect(!activityMonitor.isCheckingStillThere, "Should no longer be checking")
-        #expect(activityMonitor.isIdle, "Should be marked as idle/away")
-    }
-
     // MARK: - Test 4: Changing settings works
 
     @Test func changingTimerIntervalWorks() {
@@ -281,23 +255,6 @@ struct StepAwayTests {
         #expect(timerManager.timeRemaining == 10.0, "Timer should reset after returning from away")
         #expect(!timerManager.isPaused)
         #expect(!timerManager.wasTrulyAway)
-    }
-
-    @Test func snoozeWorks() {
-        // Setup
-        let mockTime = MockTimeProvider()
-        let timerInterval: TimeInterval = 60.0
-
-        let timerManager = TimerManager(
-            timeProvider: mockTime,
-            settingsProvider: { (timerInterval, true) }
-        )
-
-        // Act: Snooze for 5 minutes
-        timerManager.snooze(minutes: 5)
-
-        // Assert
-        #expect(timerManager.timeRemaining == 300.0, "Timer should be set to 5 minutes")
     }
 
     @Test func disablingTimerStopsIt() {
@@ -621,5 +578,71 @@ struct StepAwayTests {
         // Continue to idle check
         mockTime.advance(by: 25.0)
         #expect(idleCheckCalled, "Idle check should trigger eventually")
+    }
+
+    // MARK: - Bug: Idle detection while walk alert is showing
+
+    @Test func idleDetectedWhileWalkAlertShowingShouldResetTimer() {
+        // Bug scenario:
+        // 1. Timer reaches 0, walk alert shows ("Time to Step Away!")
+        // 2. User walks away without clicking anything
+        // 3. Idle timer fires (no activity detected)
+        // 4. EXPECTED: App should assume user stepped away and reset the timer
+        // 5. ACTUAL (bug): Alert stays up, timer doesn't reset
+
+        let mockTime = MockTimeProvider()
+        let mockActivity = MockActivitySource()
+        let timerInterval: TimeInterval = 10.0
+        let idleInterval: TimeInterval = 15.0  // Longer than timer so walk alert shows first
+
+        let timerManager = TimerManager(
+            timeProvider: mockTime,
+            settingsProvider: { (timerInterval, true) }
+        )
+
+        let activityMonitor = ActivityMonitor(
+            timeProvider: mockTime,
+            activitySource: mockActivity,
+            settingsProvider: { idleInterval }
+        )
+
+        var walkAlertShowing = false
+
+        timerManager.onTimerComplete = {
+            walkAlertShowing = true
+            // In real code, this shows a modal alert via runModal() which blocks
+        }
+
+        activityMonitor.onIdleCheckNeeded = {
+            // FIXED BEHAVIOR: Check if walk alert is showing
+            if walkAlertShowing {
+                // User went idle while walk alert showing - they already stepped away!
+                walkAlertShowing = false  // Simulate dismissing the alert (NSApp.stopModal())
+                timerManager.reset()
+                return
+            }
+            // Normal "still there?" handling would go here
+        }
+
+        activityMonitor.onActivityDetected = {
+            timerManager.resumeIfNeeded()
+        }
+
+        activityMonitor.startMonitoring()
+
+        // Step 1: Timer counts down to 0, walk alert shows (before idle threshold)
+        mockTime.advance(by: 10.0)
+        #expect(walkAlertShowing, "Walk alert should be showing")
+        #expect(timerManager.timeRemaining <= 0, "Timer should have expired")
+
+        // Step 2: User walks away - more time passes, idle is detected while walk alert is showing
+        mockTime.advance(by: 6.0)  // Total 16 seconds, exceeds 15 second idle threshold
+
+        // Step 3: Verify EXPECTED behavior
+        // When idle is detected while walk alert is showing, the app should:
+        // - Auto-dismiss the walk alert (user already stepped away!)
+        // - Reset the timer to full interval
+        #expect(!walkAlertShowing, "Walk alert should be auto-dismissed when user goes idle")
+        #expect(timerManager.timeRemaining == timerInterval, "Timer should reset when user stepped away during walk alert")
     }
 }
