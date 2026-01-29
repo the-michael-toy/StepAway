@@ -1,5 +1,9 @@
 # Changelog
 
+## Version 1.14
+
+- Menu bar now shows red stop symbol when disabled for clearer visual feedback
+
 ## Version 1.13
 
 - Fixed idle detection not seeing keystrokes

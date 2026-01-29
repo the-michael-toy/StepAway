@@ -132,20 +132,26 @@ class MenuBarController: NSObject {
         // Walking person symbol (U+1F6B6) or use SF Symbol
         let walkingIcon = "\u{1F6B6}"
 
-        let timeText: String
-        if timerManager?.wasTrulyAway == true {
-            // User is away - show --:-- with pause symbol
-            timeText = "\(walkingIcon) --:-- \u{23F8}"
-        } else if timerManager?.isEnabled == false {
-            timeText = "\(walkingIcon) --:--"
-        } else {
-            timeText = "\(walkingIcon) \(String(format: "%d:%02d", minutes, seconds))"
-        }
-
         // Use monospaced digit font to prevent jitter as timer counts down
         let font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
-        let attributes: [NSAttributedString.Key: Any] = [.font: font]
-        button.attributedTitle = NSAttributedString(string: timeText, attributes: attributes)
+        let baseAttributes: [NSAttributedString.Key: Any] = [.font: font]
+
+        if timerManager?.wasTrulyAway == true {
+            // User is away - show --:-- with pause symbol
+            let timeText = "\(walkingIcon) --:-- \u{23F8}"
+            button.attributedTitle = NSAttributedString(string: timeText, attributes: baseAttributes)
+        } else if timerManager?.isEnabled == false {
+            // Disabled - show --:-- with red stop symbol
+            let timeText = "\(walkingIcon) --:-- \u{23F9}"
+            let attributed = NSMutableAttributedString(string: timeText, attributes: baseAttributes)
+            // Color the stop symbol red
+            let stopRange = (timeText as NSString).range(of: "\u{23F9}")
+            attributed.addAttribute(.foregroundColor, value: NSColor.systemRed, range: stopRange)
+            button.attributedTitle = attributed
+        } else {
+            let timeText = "\(walkingIcon) \(String(format: "%d:%02d", minutes, seconds))"
+            button.attributedTitle = NSAttributedString(string: timeText, attributes: baseAttributes)
+        }
     }
 
     private func setupMenu() {

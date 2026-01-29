@@ -21,7 +21,7 @@ A macOS menu bar app that reminds you to take walking breaks.
 ### Menu Bar Display
 - Format: `🚶 MM:SS` (e.g., `🚶 89:32`)
 - When user is away: `🚶 --:-- ⏸`
-- When disabled: `🚶 --:--`
+- When disabled: `🚶 --:-- ⏹` (stop symbol in red)
 
 ### Dropdown Menu Options
 - **Settings...** - opens Settings window with sliders for timer interval and idle timeout
