@@ -1,5 +1,9 @@
 # Changelog
 
+## Version 1.15
+
+- Fixed "Still there?" window appearing when StepAway is disabled
+
 ## Version 1.14
 
 - Menu bar now shows red stop symbol when disabled for clearer visual feedback

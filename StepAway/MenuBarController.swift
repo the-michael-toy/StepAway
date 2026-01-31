@@ -79,6 +79,11 @@ class MenuBarController: NSObject {
     }
 
     private func handleIdleCheckNeeded() {
+        // If disabled, don't show "Still there?" - user doesn't want interruptions
+        if !timerManager.isEnabled {
+            return
+        }
+
         // If already paused as away, don't show "Still there?" - we know they're away
         if timerManager.wasTrulyAway {
             return
