@@ -1,5 +1,9 @@
 # Changelog
 
+## Version 1.16
+
+- Fixed menu bar not showing stop icon when app launches in disabled state
+
 ## Version 1.15
 
 - Fixed "Still there?" window appearing when StepAway is disabled

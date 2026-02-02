@@ -65,6 +65,8 @@ class MenuBarController: NSObject {
         timerManager.onStateChange = { [weak self] in
             self?.updateMenuState()
         }
+        // Update display now that timerManager exists (needed to show disabled state on launch)
+        updateButtonTitle(timeRemaining: timerManager.timeRemaining)
     }
 
     private func setupActivityMonitor() {
