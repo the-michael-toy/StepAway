@@ -90,9 +90,17 @@ class TimerManager {
 
     /// Pause because user is truly away (didn't respond to "still there?" prompt)
     func pauseAsTrulyAway() {
-        guard isEnabled && !isPaused else { return }
+        guard isEnabled else { return }
         isPaused = true
         wasTrulyAway = true
+        onTick?(timeRemaining)
+    }
+
+    /// Pause reminders while user finishes a task, but don't treat as away yet.
+    func pauseTemporarily() {
+        guard isEnabled else { return }
+        isPaused = true
+        wasTrulyAway = false
         onTick?(timeRemaining)
     }
 

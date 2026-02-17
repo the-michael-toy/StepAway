@@ -5,7 +5,7 @@ import AppKit
 
 class SettingsWindowController: NSWindowController {
 
-    // Discrete time values in seconds: 5s, 10s, 30s, 5m, 10m, 15m, 30m, 60m, 90m, 120m, 150m, 180m
+    // Discrete time values in seconds: 5s, 10s, 30s, 5m, 10m, 15m, 30m, 45m, 60m, 90m, 120m, 150m, 180m
     private let timeStops: [TimeInterval] = [
         5,       // 5 seconds (testing)
         10,      // 10 seconds (testing)
@@ -14,6 +14,7 @@ class SettingsWindowController: NSWindowController {
         600,     // 10 minutes
         900,     // 15 minutes
         1800,    // 30 minutes
+        2700,    // 45 minutes
         3600,    // 60 minutes
         5400,    // 90 minutes
         7200,    // 120 minutes

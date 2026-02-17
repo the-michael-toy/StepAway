@@ -7,6 +7,74 @@ import Foundation
 
 struct StepAwayTests {
 
+    // MARK: - AppCoordinator state machine
+
+    @Test func lastTaskThenBreakRequiresAwayReturnCycle() {
+        let coordinator = AppCoordinator(isEnabled: true)
+
+        let toAlertEffects = coordinator.transition(.timerReachedZero)
+        #expect(coordinator.state == .walkAlert)
+        #expect(toAlertEffects == [.showWalkAlert])
+
+        let lastTaskEffects = coordinator.transition(.alertActionLastTaskThenBreak)
+        #expect(coordinator.state == .pausedUntilBreak)
+        #expect(lastTaskEffects == [.dismissWalkAlert, .pauseUntilBreak])
+
+        let activityEffects = coordinator.transition(.activityDetected)
+        #expect(coordinator.state == .pausedUntilBreak)
+        #expect(activityEffects.isEmpty, "Activity should be ignored until an away cycle happens")
+
+        let idleEffects = coordinator.transition(.idleThresholdReached(showStillThereDialog: true))
+        #expect(coordinator.state == .confirmingPresence(previous: .pausedUntilBreak, pendingWalkAlert: false))
+        #expect(idleEffects == [.showStillThere])
+
+        let toAwayEffects = coordinator.transition(.stillThereTimeout)
+        #expect(coordinator.state == .away)
+        #expect(toAwayEffects == [.dismissStillThere, .markAwayAndPause])
+
+        let returnEffects = coordinator.transition(.activityDetected)
+        #expect(coordinator.state == .running)
+        #expect(returnEffects == [.markPresent, .resetTimer])
+    }
+
+    @Test func walkAlertIsDeferredWhileStillThereDialogIsActive() {
+        let coordinator = AppCoordinator(isEnabled: true)
+
+        let toPresenceCheckEffects = coordinator.transition(.idleThresholdReached(showStillThereDialog: true))
+        #expect(coordinator.state == .confirmingPresence(previous: .running, pendingWalkAlert: false))
+        #expect(toPresenceCheckEffects == [.showStillThere])
+
+        let deferredEffects = coordinator.transition(.timerReachedZero)
+        #expect(coordinator.state == .confirmingPresence(previous: .running, pendingWalkAlert: true))
+        #expect(deferredEffects.isEmpty)
+
+        let activityEffects = coordinator.transition(.activityDetected)
+        #expect(coordinator.state == .walkAlert)
+        #expect(activityEffects == [.dismissStillThere, .markPresent, .showWalkAlert])
+    }
+
+    @Test func fiveMoreMinutesTransitionsToSnoozed() {
+        let coordinator = AppCoordinator(isEnabled: true)
+        _ = coordinator.transition(.timerReachedZero)
+
+        let snoozeEffects = coordinator.transition(.alertActionFiveMoreMinutes)
+
+        #expect(coordinator.state == .snoozed)
+        #expect(snoozeEffects == [.dismissWalkAlert, .setSnooze(minutes: 5)])
+    }
+
+    @Test func disableThenEnableTransitionsBackToRunning() {
+        let coordinator = AppCoordinator(isEnabled: true)
+
+        let disableEffects = coordinator.transition(.disableRequested)
+        #expect(coordinator.state == .disabled)
+        #expect(disableEffects == [.dismissWalkAlert, .dismissStillThere, .disableTimer, .markPresent])
+
+        let enableEffects = coordinator.transition(.enableRequested)
+        #expect(coordinator.state == .running)
+        #expect(enableEffects == [.enableTimer, .markPresent, .resetTimer])
+    }
+
     // MARK: - Test 1: Walk reminder appears after timer expires with activity
 
     @Test func walkReminderAppearsAfterTimerExpires() {

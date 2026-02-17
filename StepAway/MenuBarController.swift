@@ -5,13 +5,287 @@ import AppKit
 import SwiftUI
 import ServiceManagement
 
-class MenuBarController: NSObject {
+final class AppCoordinator {
+    enum CountdownMode: Equatable {
+        case running
+        case snoozed
+        case pausedUntilBreak
+    }
+
+    enum State: Equatable {
+        case disabled
+        case running
+        case snoozed
+        case walkAlert
+        case pausedUntilBreak
+        case confirmingPresence(previous: CountdownMode, pendingWalkAlert: Bool)
+        case away
+    }
+
+    enum Event: Equatable {
+        case timerReachedZero
+        case alertActionFiveMoreMinutes
+        case alertActionLastTaskThenBreak
+        case idleThresholdReached(showStillThereDialog: Bool)
+        case activityDetected
+        case stillThereTimeout
+        case disableRequested
+        case enableRequested
+        case resetRequested
+    }
+
+    enum Effect: Equatable {
+        case showWalkAlert
+        case dismissWalkAlert
+        case showStillThere
+        case dismissStillThere
+        case markPresent
+        case markAwayAndPause
+        case pauseUntilBreak
+        case setSnooze(minutes: Int)
+        case resetTimer
+        case disableTimer
+        case enableTimer
+    }
+
+    private(set) var state: State
+
+    init(isEnabled: Bool) {
+        state = isEnabled ? .running : .disabled
+    }
+
+    @discardableResult
+    func transition(_ event: Event) -> [Effect] {
+        switch (state, event) {
+        case (.disabled, .enableRequested):
+            state = .running
+            return [.enableTimer, .markPresent, .resetTimer]
+        case (.disabled, .idleThresholdReached):
+            return [.markPresent]
+        case (.disabled, _):
+            return []
+
+        case (_, .disableRequested):
+            state = .disabled
+            return [.dismissWalkAlert, .dismissStillThere, .disableTimer, .markPresent]
+
+        case (_, .resetRequested):
+            state = .running
+            return [.dismissWalkAlert, .dismissStillThere, .markPresent, .resetTimer]
+
+        case (.running, .timerReachedZero), (.snoozed, .timerReachedZero):
+            state = .walkAlert
+            return [.showWalkAlert]
+
+        case (.walkAlert, .alertActionFiveMoreMinutes):
+            state = .snoozed
+            return [.dismissWalkAlert, .setSnooze(minutes: 5)]
+
+        case (.walkAlert, .alertActionLastTaskThenBreak):
+            state = .pausedUntilBreak
+            return [.dismissWalkAlert, .pauseUntilBreak]
+
+        case (.walkAlert, .idleThresholdReached):
+            state = .away
+            return [.dismissWalkAlert, .markAwayAndPause]
+
+        case (.running, .idleThresholdReached(let showStillThereDialog)):
+            if showStillThereDialog {
+                state = .confirmingPresence(previous: .running, pendingWalkAlert: false)
+                return [.showStillThere]
+            }
+            state = .away
+            return [.markAwayAndPause]
+
+        case (.snoozed, .idleThresholdReached(let showStillThereDialog)):
+            if showStillThereDialog {
+                state = .confirmingPresence(previous: .snoozed, pendingWalkAlert: false)
+                return [.showStillThere]
+            }
+            state = .away
+            return [.markAwayAndPause]
+
+        case (.confirmingPresence(let previous, let pendingWalkAlert), .activityDetected):
+            if pendingWalkAlert {
+                state = .walkAlert
+                return [.dismissStillThere, .markPresent, .showWalkAlert]
+            }
+            switch previous {
+            case .running:
+                state = .running
+            case .snoozed:
+                state = .snoozed
+            case .pausedUntilBreak:
+                state = .pausedUntilBreak
+            }
+            return [.dismissStillThere, .markPresent]
+
+        case (.confirmingPresence, .stillThereTimeout):
+            state = .away
+            return [.dismissStillThere, .markAwayAndPause]
+
+        case (.confirmingPresence(let previous, _), .timerReachedZero):
+            state = .confirmingPresence(previous: previous, pendingWalkAlert: true)
+            return []
+
+        case (.pausedUntilBreak, .idleThresholdReached(let showStillThereDialog)):
+            if showStillThereDialog {
+                state = .confirmingPresence(previous: .pausedUntilBreak, pendingWalkAlert: false)
+                return [.showStillThere]
+            }
+            state = .away
+            return [.markAwayAndPause]
+
+        case (.away, .activityDetected):
+            state = .running
+            return [.markPresent, .resetTimer]
+
+        default:
+            return []
+        }
+    }
+
+    static func stateName(_ state: State) -> String {
+        switch state {
+        case .disabled:
+            return "disabled"
+        case .running:
+            return "running"
+        case .snoozed:
+            return "snoozed"
+        case .walkAlert:
+            return "walkAlert"
+        case .pausedUntilBreak:
+            return "pausedUntilBreak"
+        case .confirmingPresence(let previous, let pendingWalkAlert):
+            return "confirmingPresence(previous:\(countdownModeName(previous)),pendingWalkAlert:\(pendingWalkAlert))"
+        case .away:
+            return "away"
+        }
+    }
+
+    static func eventName(_ event: Event) -> String {
+        switch event {
+        case .timerReachedZero:
+            return "timerReachedZero"
+        case .alertActionFiveMoreMinutes:
+            return "alertActionFiveMoreMinutes"
+        case .alertActionLastTaskThenBreak:
+            return "alertActionLastTaskThenBreak"
+        case .idleThresholdReached(let showStillThereDialog):
+            return "idleThresholdReached(showStillThereDialog:\(showStillThereDialog))"
+        case .activityDetected:
+            return "activityDetected"
+        case .stillThereTimeout:
+            return "stillThereTimeout"
+        case .disableRequested:
+            return "disableRequested"
+        case .enableRequested:
+            return "enableRequested"
+        case .resetRequested:
+            return "resetRequested"
+        }
+    }
+
+    static func effectName(_ effect: Effect) -> String {
+        switch effect {
+        case .showWalkAlert:
+            return "showWalkAlert"
+        case .dismissWalkAlert:
+            return "dismissWalkAlert"
+        case .showStillThere:
+            return "showStillThere"
+        case .dismissStillThere:
+            return "dismissStillThere"
+        case .markPresent:
+            return "markPresent"
+        case .markAwayAndPause:
+            return "markAwayAndPause"
+        case .pauseUntilBreak:
+            return "pauseUntilBreak"
+        case .setSnooze(let minutes):
+            return "setSnooze(minutes:\(minutes))"
+        case .resetTimer:
+            return "resetTimer"
+        case .disableTimer:
+            return "disableTimer"
+        case .enableTimer:
+            return "enableTimer"
+        }
+    }
+
+    static func countdownModeName(_ mode: CountdownMode) -> String {
+        switch mode {
+        case .running:
+            return "running"
+        case .snoozed:
+            return "snoozed"
+        case .pausedUntilBreak:
+            return "pausedUntilBreak"
+        }
+    }
+}
+
+final class DebugEventLog {
+    struct Record {
+        let sequence: Int
+        let timestamp: Date
+        let message: String
+    }
+
+    private var records: [Record] = []
+    private var nextSequence = 1
+    private let capacity: Int
+    private let formatter: DateFormatter
+
+    init(capacity: Int = 500) {
+        self.capacity = capacity
+        formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSZ"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone.current
+    }
+
+    var count: Int {
+        records.count
+    }
+
+    func append(_ message: String, at timestamp: Date = Date()) {
+        let record = Record(sequence: nextSequence, timestamp: timestamp, message: message)
+        nextSequence += 1
+        records.append(record)
+        if records.count > capacity {
+            records.removeFirst(records.count - capacity)
+        }
+    }
+
+    func clear() {
+        records.removeAll(keepingCapacity: true)
+    }
+
+    func formattedText(since interval: TimeInterval?) -> String {
+        let cutoff = interval.map { Date().addingTimeInterval(-$0) }
+        let filtered = records.filter { record in
+            guard let cutoff else { return true }
+            return record.timestamp >= cutoff
+        }
+        return filtered.map { record in
+            "\(formatter.string(from: record.timestamp)) | seq=\(record.sequence) | \(record.message)"
+        }.joined(separator: "\n")
+    }
+}
+
+class MenuBarController: NSObject, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private var timerManager: TimerManager!
     private var activityMonitor: ActivityMonitor!
+    private var coordinator: AppCoordinator!
+    private let debugLog = DebugEventLog(capacity: 500)
 
     // Menu items that need updating
     private var launchAtLoginMenuItem: NSMenuItem!
+    private var debugLogMenuItem: NSMenuItem!
+    private var debugLogSeparatorMenuItem: NSMenuItem!
 
     // Windows
     private var settingsWindowController: SettingsWindowController?
@@ -21,13 +295,13 @@ class MenuBarController: NSObject {
     private var stillThereProgressTimer: Timer?
     private var stillThereProgressBar: NSProgressIndicator?
     private var aboutWindow: NSWindow?
+    private var debugLogWindow: NSWindow?
+    private var debugLogHeaderLabel: NSTextField?
+    private var debugLogTextView: NSTextView?
+    private var debugFilterPopup: NSPopUpButton?
 
     // Walk alert state
     private var isWalkAlertShowing = false
-    private var walkAlertDismissedDueToIdle = false
-
-    // Grace period after clicking "OK, I'll Walk!" - ignore activity until this time
-    private var activityGraceUntil: Date?
 
     // Track previous app to restore focus
     private var previousActiveApp: NSRunningApplication?
@@ -42,6 +316,8 @@ class MenuBarController: NSObject {
         setupStatusItem()
         setupTimerManager()
         setupActivityMonitor()
+        debugLog.append("lifecycle=appLaunched")
+        logSettingsSnapshot(reason: "appLaunched")
     }
 
     private func setupStatusItem() {
@@ -56,14 +332,16 @@ class MenuBarController: NSObject {
 
     private func setupTimerManager() {
         timerManager = TimerManager()
+        coordinator = AppCoordinator(isEnabled: timerManager.isEnabled)
         timerManager.onTick = { [weak self] remaining in
             self?.updateButtonTitle(timeRemaining: remaining)
         }
         timerManager.onTimerComplete = { [weak self] in
-            self?.showWalkAlert()
+            self?.handle(event: .timerReachedZero)
         }
         timerManager.onStateChange = { [weak self] in
             self?.updateMenuState()
+            self?.updateButtonTitle(timeRemaining: self?.timerManager.timeRemaining ?? 0)
         }
         // Update display now that timerManager exists (needed to show disabled state on launch)
         updateButtonTitle(timeRemaining: timerManager.timeRemaining)
@@ -81,53 +359,61 @@ class MenuBarController: NSObject {
     }
 
     private func handleIdleCheckNeeded() {
-        // If disabled, don't show "Still there?" - user doesn't want interruptions
-        if !timerManager.isEnabled {
-            return
-        }
-
-        // If already paused as away, don't show "Still there?" - we know they're away
-        if timerManager.wasTrulyAway {
-            return
-        }
-
-        // If walk alert is showing and user went idle, they already stepped away!
-        // Dismiss the alert and pause the timer (same as clicking "OK, I'll Walk!").
-        if isWalkAlertShowing {
-            walkAlertDismissedDueToIdle = true
-            activityMonitor.userConfirmedAway()  // Mark as away
-            timerManager.pauseAsTrulyAway()      // Pause timer until they return
-            updateButtonTitle(timeRemaining: timerManager.timeRemaining)
-            NSApp.stopModal()
-            return
-        }
-
-        if AppSettings.shared.showStillThereDialog {
-            showStillThereWindow()
-        } else {
-            // Skip the dialog, directly assume user is away
-            activityMonitor.userConfirmedAway()
-            timerManager.pauseAsTrulyAway()
-            updateButtonTitle(timeRemaining: timerManager.timeRemaining)
-        }
+        handle(event: .idleThresholdReached(showStillThereDialog: AppSettings.shared.showStillThereDialog))
     }
 
     private func handleActivityDetected() {
-        // Ignore activity during grace period (right after clicking "OK, I'll Walk!")
-        if let graceUntil = activityGraceUntil, Date() < graceUntil {
-            // Re-confirm away state since activity monitor resets it when it sees activity
-            activityMonitor.userConfirmedAway()
-            return
-        }
-        activityGraceUntil = nil
+        handle(event: .activityDetected)
+    }
 
-        if stillThereWindow != nil {
-            // Activity while "still there?" window is showing - user is present
-            dismissStillThereWindow(userIsPresent: true)
-        } else {
-            // Normal activity after being away
-            timerManager.resumeIfNeeded()
+    private func handle(event: AppCoordinator.Event) {
+        let previousState = coordinator.state
+        let effects = coordinator.transition(event)
+        logTransition(event: event, from: previousState, to: coordinator.state, effects: effects)
+        apply(effects: effects)
+        updateButtonTitle(timeRemaining: timerManager.timeRemaining)
+    }
+
+    private func apply(effects: [AppCoordinator.Effect]) {
+        for effect in effects {
+            apply(effect: effect)
         }
+    }
+
+    private func apply(effect: AppCoordinator.Effect) {
+        debugLog.append("effect=\(AppCoordinator.effectName(effect))")
+        refreshDebugLogViewIfVisible()
+
+        switch effect {
+        case .showWalkAlert:
+            showWalkAlert()
+        case .dismissWalkAlert:
+            dismissWalkAlertIfNeeded()
+        case .showStillThere:
+            showStillThereWindow()
+        case .dismissStillThere:
+            dismissStillThereWindow()
+        case .markPresent:
+            activityMonitor.userConfirmedPresent()
+        case .markAwayAndPause:
+            activityMonitor.userConfirmedAway()
+            timerManager.pauseAsTrulyAway()
+        case .pauseUntilBreak:
+            timerManager.pauseTemporarily()
+        case .setSnooze(let minutes):
+            timerManager.snooze(minutes: minutes)
+        case .resetTimer:
+            timerManager.reset()
+        case .disableTimer:
+            timerManager.setEnabled(false)
+        case .enableTimer:
+            timerManager.setEnabled(true)
+        }
+    }
+
+    private func dismissWalkAlertIfNeeded() {
+        guard isWalkAlertShowing else { return }
+        NSApp.stopModal(withCode: .abort)
     }
 
     private func updateButtonTitle(timeRemaining: TimeInterval) {
@@ -136,34 +422,44 @@ class MenuBarController: NSObject {
         let minutes = Int(timeRemaining) / 60
         let seconds = Int(timeRemaining) % 60
 
-        // Walking person symbol (U+1F6B6) or use SF Symbol
+        let workingIcon = "\u{1F9D1}\u{200D}\u{1F4BB}"
         let walkingIcon = "\u{1F6B6}"
 
         // Use monospaced digit font to prevent jitter as timer counts down
         let font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
         let baseAttributes: [NSAttributedString.Key: Any] = [.font: font]
 
-        if timerManager?.wasTrulyAway == true {
-            // User is away - show --:-- with pause symbol
+        let currentState = coordinator?.state
+
+        if currentState == .away {
             let timeText = "\(walkingIcon) --:-- \u{23F8}"
             button.attributedTitle = NSAttributedString(string: timeText, attributes: baseAttributes)
-        } else if timerManager?.isEnabled == false {
-            // Disabled - show --:-- with red stop symbol
-            let timeText = "\(walkingIcon) --:-- \u{23F9}"
+            return
+        }
+
+        if currentState == .pausedUntilBreak {
+            let timeText = "\(workingIcon) --:-- \u{23F8}"
+            button.attributedTitle = NSAttributedString(string: timeText, attributes: baseAttributes)
+            return
+        }
+
+        if currentState == .disabled || (currentState == nil && AppSettings.shared.isEnabled == false) {
+            let timeText = "\(workingIcon) --:-- \u{23F9}"
             let attributed = NSMutableAttributedString(string: timeText, attributes: baseAttributes)
-            // Color the stop symbol red
             let stopRange = (timeText as NSString).range(of: "\u{23F9}")
             attributed.addAttribute(.foregroundColor, value: NSColor.systemRed, range: stopRange)
             button.attributedTitle = attributed
-        } else {
-            let timeText = "\(walkingIcon) \(String(format: "%d:%02d", minutes, seconds))"
-            button.attributedTitle = NSAttributedString(string: timeText, attributes: baseAttributes)
+            return
         }
+
+        let timeText = "\(workingIcon) \(String(format: "%d:%02d", minutes, seconds))"
+        button.attributedTitle = NSAttributedString(string: timeText, attributes: baseAttributes)
     }
 
     private func setupMenu() {
         let menu = NSMenu()
         menu.autoenablesItems = false
+        menu.delegate = self
 
         // Settings
         let settingsItem = NSMenuItem(
@@ -199,6 +495,20 @@ class MenuBarController: NSObject {
         menu.addItem(resetItem)
 
         menu.addItem(NSMenuItem.separator())
+
+        // Hidden debug log item (revealed only when Option is held while opening menu)
+        debugLogSeparatorMenuItem = NSMenuItem.separator()
+        debugLogSeparatorMenuItem.isHidden = true
+        menu.addItem(debugLogSeparatorMenuItem)
+
+        debugLogMenuItem = NSMenuItem(
+            title: "Show Debug Event Log...",
+            action: #selector(showDebugEventLog),
+            keyEquivalent: ""
+        )
+        debugLogMenuItem.target = self
+        debugLogMenuItem.isHidden = true
+        menu.addItem(debugLogMenuItem)
 
         // About
         let aboutItem = NSMenuItem(
@@ -236,16 +546,18 @@ class MenuBarController: NSObject {
     }
 
     private func handleSettingsChanged() {
-        // Sync enabled state
-        let enabled = AppSettings.shared.isEnabled
-        if enabled != timerManager.isEnabled {
-            timerManager.setEnabled(enabled)
-        }
-
-        // Reset timer with new interval
-        timerManager.reset()
         activityMonitor.updateIdleInterval()
-        updateButtonTitle(timeRemaining: timerManager.timeRemaining)
+        logSettingsSnapshot(reason: "settingsChanged")
+
+        if AppSettings.shared.isEnabled {
+            if coordinator.state == .disabled {
+                handle(event: .enableRequested)
+            } else {
+                handle(event: .resetRequested)
+            }
+        } else {
+            handle(event: .disableRequested)
+        }
     }
 
     @objc private func showAbout() {
@@ -408,12 +720,175 @@ class MenuBarController: NSObject {
     }
 
     @objc private func resetTimer() {
-        timerManager.reset()
-        updateButtonTitle(timeRemaining: timerManager.timeRemaining)
+        handle(event: .resetRequested)
     }
 
     @objc private func quitApp() {
         NSApplication.shared.terminate(nil)
+    }
+
+    func menuWillOpen(_ menu: NSMenu) {
+        let shouldShowDebug = isOptionKeyPressed()
+        debugLogMenuItem.isHidden = !shouldShowDebug
+        debugLogSeparatorMenuItem.isHidden = !shouldShowDebug
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        debugLogMenuItem.isHidden = true
+        debugLogSeparatorMenuItem.isHidden = true
+    }
+
+    private func isOptionKeyPressed() -> Bool {
+        CGEventSource.flagsState(.combinedSessionState).contains(.maskAlternate)
+    }
+
+    @objc private func showDebugEventLog() {
+        if debugLogWindow == nil {
+            createDebugLogWindow()
+        }
+        refreshDebugLogView()
+        debugLogWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func createDebugLogWindow() {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 900, height: 560),
+            styleMask: [.titled, .closable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "StepAway Debug Event Log"
+        window.center()
+        window.isReleasedWhenClosed = false
+
+        let contentView = NSView(frame: window.contentView!.bounds)
+        contentView.autoresizingMask = [.width, .height]
+
+        let header = NSTextField(labelWithString: "")
+        header.font = NSFont.systemFont(ofSize: 12)
+        header.textColor = .secondaryLabelColor
+        header.frame = NSRect(x: 20, y: 525, width: 860, height: 18)
+        header.autoresizingMask = [.width, .minYMargin]
+        contentView.addSubview(header)
+        debugLogHeaderLabel = header
+
+        let filterPopup = NSPopUpButton(frame: NSRect(x: 20, y: 495, width: 140, height: 28), pullsDown: false)
+        filterPopup.addItems(withTitles: ["Last 5 min", "Last 15 min", "Last 60 min", "All"])
+        filterPopup.selectItem(at: 0)
+        filterPopup.target = self
+        filterPopup.action = #selector(debugFilterChanged)
+        filterPopup.autoresizingMask = [.maxXMargin, .minYMargin]
+        contentView.addSubview(filterPopup)
+        debugFilterPopup = filterPopup
+
+        let copy5Button = NSButton(frame: NSRect(x: 170, y: 495, width: 150, height: 28))
+        copy5Button.title = "Copy Last 5 Minutes"
+        copy5Button.bezelStyle = .rounded
+        copy5Button.target = self
+        copy5Button.action = #selector(copyLastFiveMinutes)
+        copy5Button.autoresizingMask = [.maxXMargin, .minYMargin]
+        contentView.addSubview(copy5Button)
+
+        let copyVisibleButton = NSButton(frame: NSRect(x: 330, y: 495, width: 110, height: 28))
+        copyVisibleButton.title = "Copy Visible"
+        copyVisibleButton.bezelStyle = .rounded
+        copyVisibleButton.target = self
+        copyVisibleButton.action = #selector(copyVisibleLog)
+        copyVisibleButton.autoresizingMask = [.maxXMargin, .minYMargin]
+        contentView.addSubview(copyVisibleButton)
+
+        let clearButton = NSButton(frame: NSRect(x: 450, y: 495, width: 70, height: 28))
+        clearButton.title = "Clear"
+        clearButton.bezelStyle = .rounded
+        clearButton.target = self
+        clearButton.action = #selector(clearDebugLog)
+        clearButton.autoresizingMask = [.maxXMargin, .minYMargin]
+        contentView.addSubview(clearButton)
+
+        let scrollView = NSScrollView(frame: NSRect(x: 20, y: 20, width: 860, height: 465))
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = true
+        scrollView.borderType = .bezelBorder
+        scrollView.autoresizingMask = [.width, .height]
+
+        let textView = NSTextView(frame: scrollView.bounds)
+        textView.isEditable = false
+        textView.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+        textView.autoresizingMask = [.width, .height]
+        textView.string = ""
+        scrollView.documentView = textView
+        contentView.addSubview(scrollView)
+        debugLogTextView = textView
+
+        window.contentView = contentView
+        debugLogWindow = window
+    }
+
+    @objc private func debugFilterChanged() {
+        refreshDebugLogView()
+    }
+
+    @objc private func copyLastFiveMinutes() {
+        copyToPasteboard(debugLog.formattedText(since: 5 * 60))
+    }
+
+    @objc private func copyVisibleLog() {
+        copyToPasteboard(debugLogTextView?.string ?? "")
+    }
+
+    @objc private func clearDebugLog() {
+        debugLog.clear()
+        refreshDebugLogView()
+    }
+
+    private func copyToPasteboard(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+    }
+
+    private func selectedDebugFilterInterval() -> TimeInterval? {
+        switch debugFilterPopup?.indexOfSelectedItem ?? 0 {
+        case 0:
+            return 5 * 60
+        case 1:
+            return 15 * 60
+        case 2:
+            return 60 * 60
+        default:
+            return nil
+        }
+    }
+
+    private func refreshDebugLogViewIfVisible() {
+        guard debugLogWindow?.isVisible == true else { return }
+        refreshDebugLogView()
+    }
+
+    private func refreshDebugLogView() {
+        let interval = selectedDebugFilterInterval()
+        debugLogTextView?.string = debugLog.formattedText(since: interval)
+
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
+        let stateText = AppCoordinator.stateName(coordinator.state)
+        debugLogHeaderLabel?.stringValue = "Version \(version) (\(build)) | State: \(stateText) | Records: \(debugLog.count)"
+    }
+
+    private func logTransition(event: AppCoordinator.Event, from: AppCoordinator.State, to: AppCoordinator.State, effects: [AppCoordinator.Effect]) {
+        let eventName = AppCoordinator.eventName(event)
+        let fromName = AppCoordinator.stateName(from)
+        let toName = AppCoordinator.stateName(to)
+        let effectNames = effects.map { AppCoordinator.effectName($0) }.joined(separator: ",")
+        debugLog.append("event=\(eventName) | state=\(fromName)->\(toName) | effects=[\(effectNames)]")
+        refreshDebugLogViewIfVisible()
+    }
+
+    private func logSettingsSnapshot(reason: String) {
+        debugLog.append(
+            "settings(reason:\(reason)) | isEnabled=\(AppSettings.shared.isEnabled) | timerInterval=\(Int(AppSettings.shared.timerInterval)) | idleInterval=\(Int(AppSettings.shared.idleInterval)) | showStillThereDialog=\(AppSettings.shared.showStillThereDialog)"
+        )
+        refreshDebugLogViewIfVisible()
     }
 
     private func showStillThereWindow() {
@@ -525,7 +1000,7 @@ class MenuBarController: NSObject {
 
         // Start 60-second timer
         stillThereTimer = Timer.scheduledTimer(withTimeInterval: 60.0, repeats: false) { [weak self] _ in
-            self?.dismissStillThereWindow(userIsPresent: false)
+            self?.handle(event: .stillThereTimeout)
         }
 
         // Update progress bar smoothly (10 times per second)
@@ -536,7 +1011,7 @@ class MenuBarController: NSObject {
         }
     }
 
-    private func dismissStillThereWindow(userIsPresent: Bool) {
+    private func dismissStillThereWindow() {
         stillThereTimer?.invalidate()
         stillThereTimer = nil
         stillThereWarningTimer?.invalidate()
@@ -553,65 +1028,45 @@ class MenuBarController: NSObject {
             previousApp.activate()
             previousActiveApp = nil
         }
-
-        if userIsPresent {
-            // User confirmed present - keep timer running, don't pause
-            activityMonitor.userConfirmedPresent()
-        } else {
-            // User didn't respond - they're truly away
-            activityMonitor.userConfirmedAway()
-            timerManager.pauseAsTrulyAway()
-            updateButtonTitle(timeRemaining: timerManager.timeRemaining)
-        }
     }
 
     private func showWalkAlert() {
-        // Set flag immediately to prevent race with idle timer
-        isWalkAlertShowing = true
-        walkAlertDismissedDueToIdle = false
-
         // Dismiss "Still there?" if showing - walk alert takes priority
         if stillThereWindow != nil {
-            dismissStillThereWindow(userIsPresent: true)
+            dismissStillThereWindow()
         }
 
         DispatchQueue.main.async {
+            self.isWalkAlertShowing = true
+
             let alert = NSAlert()
             alert.messageText = "Time to Step Away!"
-            alert.informativeText = "You've been working for a while. Take a walk and stretch your legs!"
+            alert.informativeText = "Choose \"Last task, then break\" to pause reminders until you take a break and return."
             alert.alertStyle = .informational
-            alert.addButton(withTitle: "OK, I'll Walk!")
-            alert.addButton(withTitle: "Snooze 5 min")
+            alert.addButton(withTitle: "5 more minutes")
+            alert.addButton(withTitle: "Last task, then break")
 
             // Bring app to front for the alert
             NSApp.activate(ignoringOtherApps: true)
 
             let response = alert.runModal()
-
             self.isWalkAlertShowing = false
 
-            // If alert was dismissed because user went idle, timer is already reset
-            if self.walkAlertDismissedDueToIdle {
-                self.walkAlertDismissedDueToIdle = false
-                self.updateButtonTitle(timeRemaining: self.timerManager.timeRemaining)
+            // Another event already moved us out of walkAlert (for example idle/disable).
+            guard self.coordinator.state == .walkAlert else {
                 return
             }
 
-            if response == .alertSecondButtonReturn {
-                // Snooze - set a 5 minute timer
-                self.timerManager.snooze(minutes: 5)
-            } else {
-                // User is going for a walk - pause timer until they return
-                // Grace period so the button click doesn't count as "returned"
-                self.activityGraceUntil = Date().addingTimeInterval(3.0)
-                self.activityMonitor.userConfirmedAway()
-                self.timerManager.pauseAsTrulyAway()
+            if response == .alertFirstButtonReturn {
+                self.handle(event: .alertActionFiveMoreMinutes)
+            } else if response == .alertSecondButtonReturn {
+                self.handle(event: .alertActionLastTaskThenBreak)
             }
-            self.updateButtonTitle(timeRemaining: self.timerManager.timeRemaining)
         }
     }
 
     func cleanup() {
+        debugLog.append("lifecycle=appWillTerminate")
         activityMonitor.stopMonitoring()
         timerManager.stop()
     }
