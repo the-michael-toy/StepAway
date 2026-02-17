@@ -1,12 +1,13 @@
 # Changelog
 
-## Version 1.17
+## Version 1.18
 
 - Added explicit AppCoordinator state machine (`State`/`Event`/`Effect`) for transition-driven behavior
 - Added "Last task, then break" flow (pause reminders until away -> return)
 - Updated walk alert actions to "5 more minutes" and "Last task, then break"
 - Updated menu bar status icons for working/paused/away/disabled states
 - Added hidden debug event log viewer (Option-open menu to reveal)
+- Added 45-minute option to timer interval and idle timeout sliders
 
 ## Version 1.16
 
