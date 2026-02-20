@@ -3,7 +3,7 @@
 
 import AppKit
 
-class SettingsWindowController: NSWindowController {
+class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
     // Discrete time values in seconds: 5s, 10s, 30s, 5m, 10m, 15m, 30m, 45m, 60m, 90m, 120m, 150m, 180m
     private let timeStops: [TimeInterval] = [
@@ -35,6 +35,7 @@ class SettingsWindowController: NSWindowController {
     private var availableSounds: [String] = []
 
     var onSettingsChanged: (() -> Void)?
+    var onWindowClosed: (() -> Void)?
 
     convenience init() {
         let window = NSWindow(
@@ -48,9 +49,14 @@ class SettingsWindowController: NSWindowController {
         window.isReleasedWhenClosed = false
 
         self.init(window: window)
+        window.delegate = self
         loadAvailableSounds()
         setupUI()
         loadSettings()
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        onWindowClosed?()
     }
 
     private func loadAvailableSounds() {

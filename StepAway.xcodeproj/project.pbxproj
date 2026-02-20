@@ -15,6 +15,12 @@
 		A1000001242424240000006 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1000002242424240000008 /* Assets.xcassets */; };
 		A1000001242424240000009 /* SettingsWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002242424240000009 /* SettingsWindowController.swift */; };
 		A1000001242424240000010 /* TestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002242424240000010 /* TestSupport.swift */; };
+		A1000001242424240000011 /* AppCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002242424240000011 /* AppCoordinator.swift */; };
+		A1000001242424240000012 /* DebugEventLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002242424240000012 /* DebugEventLog.swift */; };
+		A1000001242424240000013 /* AboutWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002242424240000013 /* AboutWindowController.swift */; };
+		A1000001242424240000014 /* DebugLogWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002242424240000014 /* DebugLogWindowController.swift */; };
+		A1000001242424240000015 /* StillThereController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002242424240000015 /* StillThereController.swift */; };
+		A1000001242424240000016 /* WalkAlertController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002242424240000016 /* WalkAlertController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -39,6 +45,12 @@
 		A1000002242424240000008 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A1000002242424240000009 /* SettingsWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindowController.swift; sourceTree = "<group>"; };
 		A1000002242424240000010 /* TestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestSupport.swift; sourceTree = "<group>"; };
+		A1000002242424240000011 /* AppCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCoordinator.swift; sourceTree = "<group>"; };
+		A1000002242424240000012 /* DebugEventLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugEventLog.swift; sourceTree = "<group>"; };
+		A1000002242424240000013 /* AboutWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutWindowController.swift; sourceTree = "<group>"; };
+		A1000002242424240000014 /* DebugLogWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLogWindowController.swift; sourceTree = "<group>"; };
+		A1000002242424240000015 /* StillThereController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StillThereController.swift; sourceTree = "<group>"; };
+		A1000002242424240000016 /* WalkAlertController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkAlertController.swift; sourceTree = "<group>"; };
 		A1000003242424240000001 /* StepAway.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StepAway.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -77,6 +89,12 @@
 			isa = PBXGroup;
 			children = (
 				A1000002242424240000001 /* StepAwayApp.swift */,
+				A1000002242424240000011 /* AppCoordinator.swift */,
+				A1000002242424240000012 /* DebugEventLog.swift */,
+				A1000002242424240000013 /* AboutWindowController.swift */,
+				A1000002242424240000014 /* DebugLogWindowController.swift */,
+				A1000002242424240000015 /* StillThereController.swift */,
+				A1000002242424240000016 /* WalkAlertController.swift */,
 				A1000002242424240000002 /* MenuBarController.swift */,
 				A1000002242424240000003 /* ActivityMonitor.swift */,
 				A1000002242424240000004 /* TimerManager.swift */,
@@ -211,6 +229,12 @@
 			buildActionMask = 2147483647;
 			files = (
 				A1000001242424240000001 /* StepAwayApp.swift in Sources */,
+				A1000001242424240000011 /* AppCoordinator.swift in Sources */,
+				A1000001242424240000012 /* DebugEventLog.swift in Sources */,
+				A1000001242424240000013 /* AboutWindowController.swift in Sources */,
+				A1000001242424240000014 /* DebugLogWindowController.swift in Sources */,
+				A1000001242424240000015 /* StillThereController.swift in Sources */,
+				A1000001242424240000016 /* WalkAlertController.swift in Sources */,
 				A1000001242424240000002 /* MenuBarController.swift in Sources */,
 				A1000001242424240000003 /* ActivityMonitor.swift in Sources */,
 				A1000001242424240000004 /* TimerManager.swift in Sources */,

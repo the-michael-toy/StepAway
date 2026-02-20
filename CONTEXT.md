@@ -60,11 +60,18 @@ StepAway/
 ├── StepAway.xcodeproj/
 ├── StepAway/
 │   ├── StepAwayApp.swift              # App entry point and AppDelegate
-│   ├── MenuBarController.swift        # Menu bar UI and menu handling
+│   ├── AppCoordinator.swift           # Pure state machine (events in, effects out)
+│   ├── DebugEventLog.swift            # In-memory ring buffer for debug records
+│   ├── MenuBarController.swift        # Wiring: events → coordinator → effects → controllers
+│   ├── WalkAlertController.swift      # Walk alert lifecycle + modal key/mouse monitors
+│   ├── StillThereController.swift     # "Still there?" window + timers + focus restore
+│   ├── AboutWindowController.swift    # About window
+│   ├── DebugLogWindowController.swift # Debug Log viewer window
 │   ├── SettingsWindowController.swift # Settings window with sliders
 │   ├── ActivityMonitor.swift          # Mouse/keyboard activity detection
 │   ├── TimerManager.swift             # Countdown timer logic
 │   ├── Settings.swift                 # AppSettings singleton (UserDefaults wrapper)
+│   ├── TestSupport.swift              # Mock time/activity providers for tests
 │   ├── Assets.xcassets/               # App icon
 │   ├── Info.plist
 │   └── StepAway.entitlements
@@ -125,21 +132,23 @@ cp -R ~/Library/Developer/Xcode/DerivedData/StepAway-*/Build/Products/Release/St
 - App sandbox is disabled to allow global event monitoring for activity detection
 - The `AppSettings` class is named to avoid conflict with SwiftUI's `Settings` scene type
 - License: CC0 1.0 (Public Domain)
-- The walk alert uses `NSAlert.runModal()` which blocks. For timers to fire during the modal, they must be scheduled on `.common` run loop modes (not just `.default`). Use `NSApp.stopModal()` to dismiss programmatically.
+- The walk alert is a modal-level panel (`NSWindow.Level.modalPanel`) with both key and mouse event monitors. Keystrokes beep and are swallowed; clicks outside the alert beep and are swallowed (except menu bar clicks, which pass through for the coordinator's deferral logic). `runModal` was abandoned because it blocks the run loop.
 - When writing tests, be wary of "simulation tests" that implement expected behavior in the test's callback handlers rather than testing the actual production wiring.
 
 ## Architecture Notes
 
 ### AppCoordinator Reducer
 
-Coordination is now explicit in `MenuBarController.swift` via `AppCoordinator`, with:
+`AppCoordinator` (in `AppCoordinator.swift`) is the single source of truth, with:
 
 - A closed `State` enum (`disabled`, `running`, `snoozed`, `walkAlert`, `pausedUntilBreak`, `confirmingPresence`, `away`)
 - A closed `Event` enum (`timerReachedZero`, alert actions, idle/activity, enable/disable/reset, etc.)
 - A closed `Effect` enum that drives side effects (show/dismiss windows, timer actions, away/present markers)
 - A single transition function: `transition(_ event: Event) -> [Effect]`
 
-`MenuBarController` is now primarily an effect executor and UI adapter, rather than a place where state transitions are decided ad-hoc.
+`MenuBarController` is pure wiring: it receives callbacks from `TimerManager`, `ActivityMonitor`, and window controllers, maps them to events, feeds them to the coordinator, and dispatches the resulting effects to the appropriate controllers.
+
+Window controllers (`WalkAlertController`, `StillThereController`, `AboutWindowController`, `DebugLogWindowController`) report user actions via closures. `MenuBarController` wires those closures to `handle(event:)`.
 
 ### Reducer Test Coverage
 
@@ -191,26 +200,43 @@ Use a single coordinator state enum:
 - `disableRequested`
 - `enableRequested`
 - `resetRequested`
+- `menuOpened`
+- `menuClosed`
+- `settingsOpened`
+- `settingsClosed`
+- `auxiliaryWindowOpened` (About, Debug Log)
+- `auxiliaryWindowClosed`
 
 ### Transition Rules
 
 | Current State | Event | Next State | Actions |
 |---|---|---|---|
-| `running` | `timerReachedZero` | `walkAlert` | Show walk alert |
-| `snoozed` | `timerReachedZero` | `walkAlert` | Show walk alert |
+| `running` or `snoozed` | `timerReachedZero` (UI surface active) | same | Set `deferredWalkAlert=true` |
+| `running` | `timerReachedZero` (no UI surface) | `walkAlert` | Show walk alert |
+| `snoozed` | `timerReachedZero` (no UI surface) | `walkAlert` | Show walk alert |
 | `walkAlert` | `alertActionFiveMoreMinutes` | `snoozed` | Set timer to 5:00, close alert |
 | `walkAlert` | `alertActionLastTaskThenBreak` | `pausedUntilBreak` | Pause timer display, close alert |
 | `walkAlert` | `idleThresholdReached` | `away` | Auto-dismiss alert, mark away |
-| `running` or `snoozed` | `idleThresholdReached` | `confirmingPresence` or `away` | Show "Still there?" if enabled, otherwise mark away |
+| `walkAlert` | `menuOpened` | `running` | Dismiss alert, set `deferredWalkAlert=true` (alert returns when menu closes) |
+| `running` or `snoozed` | `idleThresholdReached` | `confirmingPresence` or `away` | Show "Still there?" if enabled, otherwise mark away; transfers `deferredWalkAlert` to `pendingWalkAlert` |
 | `confirmingPresence` | `timerReachedZero` | `confirmingPresence` | Set `pendingWalkAlert=true` (do not show walk alert yet) |
 | `confirmingPresence` | `activityDetected` | `running` / `snoozed` / `pausedUntilBreak` / `walkAlert` | Close window; if `pendingWalkAlert=true`, show walk alert; otherwise return to prior mode |
 | `confirmingPresence` | `stillThereTimeout` | `away` | Close window, mark away |
 | `pausedUntilBreak` | `activityDetected` | `pausedUntilBreak` | Ignore activity for reminder purposes |
 | `pausedUntilBreak` | `idleThresholdReached` | `confirmingPresence` or `away` | Show "Still there?" if enabled; timeout then marks away |
 | `away` | `activityDetected` | `running` | Reset timer to full interval, clear away/paused flags |
-| any non-`disabled` state | `disableRequested` | `disabled` | Close modal windows, stop timer |
+| any non-`disabled` state | `disableRequested` | `disabled` | Close modal windows, stop timer, clear `deferredWalkAlert` |
 | `disabled` | `enableRequested` | `running` | Reset timer to full interval, start timer |
-| any non-`disabled` state | `resetRequested` | `running` | Reset timer to full interval |
+| any non-`disabled` state | `resetRequested` | `running` | Reset timer to full interval, clear `deferredWalkAlert` |
+| any | `menuOpened` (non-walkAlert) | same | Set `isMenuOpen=true` |
+| any | `menuClosed` | same | Set `isMenuOpen=false`; if deferred and no UI surface active, fire walk alert |
+| any | `settingsOpened` (walkAlert) | `running` | Dismiss alert, set `deferredWalkAlert=true`; MenuBarController stops timer + activity monitor |
+| any | `settingsOpened` (confirmingPresence) | previous | Dismiss still there, mark present; transfer `pendingWalkAlert` to `deferredWalkAlert` |
+| any | `settingsOpened` (other) | same | Set `isSettingsOpen=true`; MenuBarController stops timer + activity monitor |
+| any | `settingsClosed` | same | Set `isSettingsOpen=false`; if deferred and no UI surface active, fire walk alert; MenuBarController restarts activity monitor and resets timer (unless walk alert just fired) |
+| any | `auxiliaryWindowOpened` (walkAlert) | `running` | Dismiss alert, set `deferredWalkAlert=true`, increment `auxiliaryWindowCount` |
+| any | `auxiliaryWindowOpened` (other) | same | Increment `auxiliaryWindowCount` |
+| any | `auxiliaryWindowClosed` | same | Decrement `auxiliaryWindowCount`; if deferred and no UI surface active, fire walk alert |
 
 ### Display Mapping (Proposed)
 
@@ -311,6 +337,31 @@ One line per record, designed for copy/paste:
 4. `testCopyLastFiveMinutesFiltersByTimestamp`
 5. `testNoSensitiveFieldsInLogRecords`
 
+## Walk Alert Implementation (Resolved February 19, 2026)
+
+The walk alert uses a modal-level panel (`.modalPanel`, level 8) with event monitors instead of `runModal`:
+
+- **Key monitor (local):** Intercepts all `keyDown` events within StepAway. Button key equivalents (Return) pass through via `performKeyEquivalent`; everything else beeps and is swallowed.
+- **Mouse monitor (local):** Intercepts `leftMouseDown` and `rightMouseDown` within StepAway. Clicks inside the alert panel pass through. Clicks in the menu bar area (top 24pt of any screen) pass through (so the coordinator's `menuOpened` deferral works). All other clicks beep and are swallowed.
+- **Mouse monitor (global):** Intercepts clicks in other apps. Beeps and yanks focus back to the walk alert panel. Menu bar clicks pass through.
+- **Activation observer:** Re-activates the panel whenever another app steals focus (`NSWorkspace.didActivateApplicationNotification` with `bundleIdentifier != ours`).
+- **No run loop blocking:** TimerManager, ActivityMonitor, and menu delegate all work normally during the walk alert.
+
+Three earlier approaches (`runModal`, deferred `runModal`, floating panel without mouse monitor) were tried and abandoned. See git history for details.
+
+### UI State Deferral
+
+The coordinator tracks `isMenuOpen`, `isSettingsOpen`, `auxiliaryWindowCount`, and `deferredWalkAlert` as orthogonal flags. `uiSurfaceActive` is true when any of these indicate an open surface.
+
+- `timerReachedZero` while a UI surface is active sets `deferredWalkAlert=true` and returns no effects
+- Closing the last UI surface checks the flag and fires the walk alert if the state is still `running`/`snoozed`
+- `disableRequested` and `resetRequested` clear the deferred flag
+- `idleThresholdReached` while deferred transfers the flag to `pendingWalkAlert` in `confirmingPresence`
+- `menuOpened` while in `walkAlert` defers the alert (dismisses temporarily, comes back when menu closes; "Reset Timer" from the menu clears the deferred flag)
+- `settingsOpened` while in `walkAlert` or `confirmingPresence` dismisses the window and preserves the deferred flag; MenuBarController also stops the timer and activity monitor
+- `auxiliaryWindowOpened` (About, Debug Log) while in `walkAlert` dismisses and defers; fired inline from menu action to avoid race with `menuDidClose`
+- UI surface tracking cases are ordered before the `(.disabled, _)` catch-all in the coordinator switch, so flags are maintained even when disabled
+
 ## Future Improvements
 
 ### Better Activity Detection for Passive Media Consumption
@@ -382,3 +433,33 @@ Use short intervals for testing (e.g., 10s walk timer, 5s idle timeout).
    - Do nothing for 5s → "Still there?" appears
    - Press key or move mouse to dismiss
    - Expected: Focus returns to previous app
+
+10. **Walk alert blocks clicks on other apps**
+    - Type for 10s → walk alert appears
+    - Click on another app's window
+    - Expected: Beep, focus yanks back to walk alert
+
+11. **Walk alert blocks keystrokes**
+    - Type for 10s → walk alert appears
+    - Press any key (not Return/Enter)
+    - Expected: Beep, keystroke not passed through
+
+12. **Settings opens cleanly during walk alert**
+    - Type for 10s → walk alert appears
+    - Click menu bar → open Settings
+    - Expected: Walk alert dismissed, Settings opens, timer stops
+    - Close Settings without changes
+    - Expected: Walk alert comes back
+
+13. **About opens cleanly during walk alert**
+    - Type for 10s → walk alert appears
+    - Click menu bar → open About
+    - Expected: Walk alert dismissed, About opens cleanly
+    - Close About
+    - Expected: Walk alert comes back
+
+14. **Settings disable clears deferred alert**
+    - Type for 10s → walk alert appears
+    - Click menu bar → open Settings → uncheck Enable
+    - Close Settings
+    - Expected: App is disabled (`--:-- ⏹`), no walk alert

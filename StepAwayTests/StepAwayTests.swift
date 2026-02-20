@@ -572,6 +572,221 @@ struct StepAwayTests {
         #expect(!activityMonitor.isCheckingStillThere)
     }
 
+    // MARK: - UI Surface Deferral Tests
+
+    @Test func timerDeferredWhileMenuOpen() {
+        let coordinator = AppCoordinator(isEnabled: true)
+
+        coordinator.transition(.menuOpened)
+        #expect(coordinator.isMenuOpen)
+
+        let effects = coordinator.transition(.timerReachedZero)
+        #expect(effects.isEmpty, "Walk alert should be deferred while menu is open")
+        #expect(coordinator.deferredWalkAlert)
+        #expect(coordinator.state == .running)
+
+        let closeEffects = coordinator.transition(.menuClosed)
+        #expect(closeEffects == [.showWalkAlert])
+        #expect(coordinator.state == .walkAlert)
+        #expect(!coordinator.deferredWalkAlert)
+    }
+
+    @Test func settingsOpenDefersWalkAlertAndCloseBringsItBack() {
+        let coordinator = AppCoordinator(isEnabled: true)
+
+        // Walk alert fires, then gets deferred by menu open
+        coordinator.transition(.timerReachedZero)
+        coordinator.transition(.menuOpened)
+        #expect(coordinator.deferredWalkAlert)
+
+        // Open settings from menu — deferred alert preserved
+        coordinator.transition(.settingsOpened)
+        #expect(coordinator.deferredWalkAlert)
+
+        // Menu closes while settings is open — alert stays deferred
+        let menuCloseEffects = coordinator.transition(.menuClosed)
+        #expect(menuCloseEffects.isEmpty, "Alert should stay deferred while settings is open")
+
+        // Close settings without changes — deferred alert fires
+        let closeEffects = coordinator.transition(.settingsClosed)
+        #expect(closeEffects == [.showWalkAlert])
+        #expect(coordinator.state == .walkAlert)
+        #expect(!coordinator.deferredWalkAlert)
+    }
+
+    @Test func settingsOpenDeferredAlertClearedByReset() {
+        let coordinator = AppCoordinator(isEnabled: true)
+
+        // Walk alert fires, gets deferred by menu, settings opens
+        coordinator.transition(.timerReachedZero)
+        coordinator.transition(.menuOpened)
+        coordinator.transition(.settingsOpened)
+        #expect(coordinator.deferredWalkAlert)
+
+        // User changes a setting → handleSettingsChanged fires resetRequested
+        coordinator.transition(.resetRequested)
+        #expect(!coordinator.deferredWalkAlert)
+
+        // Close settings — no alert (it was cleared by reset)
+        coordinator.transition(.menuClosed)
+        let closeEffects = coordinator.transition(.settingsClosed)
+        #expect(closeEffects.isEmpty)
+        #expect(coordinator.state == .running)
+    }
+
+    @Test func settingsOpenDismissesWalkAlertDirectly() {
+        let coordinator = AppCoordinator(isEnabled: true)
+
+        coordinator.transition(.timerReachedZero)
+        #expect(coordinator.state == .walkAlert)
+
+        // Settings opened directly while walk alert showing → dismiss and defer
+        let effects = coordinator.transition(.settingsOpened)
+        #expect(effects == [.dismissWalkAlert])
+        #expect(coordinator.state == .running)
+        #expect(coordinator.deferredWalkAlert)
+
+        // Close settings → alert comes back
+        let closeEffects = coordinator.transition(.settingsClosed)
+        #expect(closeEffects == [.showWalkAlert])
+        #expect(coordinator.state == .walkAlert)
+    }
+
+    @Test func settingsOpenDismissesStillThere() {
+        let coordinator = AppCoordinator(isEnabled: true)
+
+        coordinator.transition(.idleThresholdReached(showStillThereDialog: true))
+        #expect(coordinator.state == .confirmingPresence(previous: .running, pendingWalkAlert: false))
+
+        let effects = coordinator.transition(.settingsOpened)
+        #expect(effects == [.dismissStillThere, .markPresent])
+        #expect(coordinator.state == .running)
+    }
+
+    @Test func settingsOpenPreservesPendingWalkAlertFromConfirmingPresence() {
+        let coordinator = AppCoordinator(isEnabled: true)
+
+        // Timer fires during confirming presence → pendingWalkAlert = true
+        coordinator.transition(.idleThresholdReached(showStillThereDialog: true))
+        coordinator.transition(.timerReachedZero)
+        #expect(coordinator.state == .confirmingPresence(previous: .running, pendingWalkAlert: true))
+
+        // Open settings → still there dismissed, pendingWalkAlert transferred to deferred
+        let effects = coordinator.transition(.settingsOpened)
+        #expect(effects == [.dismissStillThere, .markPresent])
+        #expect(coordinator.deferredWalkAlert)
+
+        // Close settings → walk alert fires
+        let closeEffects = coordinator.transition(.settingsClosed)
+        #expect(closeEffects == [.showWalkAlert])
+        #expect(coordinator.state == .walkAlert)
+    }
+
+    @Test func auxiliaryWindowDefersWalkAlert() {
+        let coordinator = AppCoordinator(isEnabled: true)
+
+        // Walk alert fires, gets deferred by menu, about opens
+        coordinator.transition(.timerReachedZero)
+        coordinator.transition(.menuOpened)
+        coordinator.transition(.auxiliaryWindowOpened)
+        let menuCloseEffects = coordinator.transition(.menuClosed)
+        #expect(menuCloseEffects.isEmpty, "Alert stays deferred while auxiliary window is open")
+
+        // Close auxiliary window → alert comes back
+        let closeEffects = coordinator.transition(.auxiliaryWindowClosed)
+        #expect(closeEffects == [.showWalkAlert])
+        #expect(coordinator.state == .walkAlert)
+    }
+
+    @Test func menuOpenDuringWalkAlertDefersIt() {
+        let coordinator = AppCoordinator(isEnabled: true)
+        coordinator.transition(.timerReachedZero)
+        #expect(coordinator.state == .walkAlert)
+
+        let effects = coordinator.transition(.menuOpened)
+        #expect(coordinator.state == .running)
+        #expect(coordinator.deferredWalkAlert)
+        #expect(effects == [.dismissWalkAlert])
+
+        // Close menu without doing anything → walk alert comes back
+        let closeEffects = coordinator.transition(.menuClosed)
+        #expect(closeEffects == [.showWalkAlert])
+        #expect(coordinator.state == .walkAlert)
+    }
+
+    @Test func menuOpenDuringWalkAlertThenResetClearsDeferred() {
+        let coordinator = AppCoordinator(isEnabled: true)
+        coordinator.transition(.timerReachedZero)
+        coordinator.transition(.menuOpened)
+        #expect(coordinator.deferredWalkAlert)
+
+        // User clicks "Reset Timer" from the menu
+        let resetEffects = coordinator.transition(.resetRequested)
+        #expect(coordinator.state == .running)
+        #expect(!coordinator.deferredWalkAlert)
+        #expect(resetEffects.contains(.resetTimer))
+
+        // Close menu → no walk alert (reset cleared the deferred flag)
+        let closeEffects = coordinator.transition(.menuClosed)
+        #expect(closeEffects.isEmpty)
+        #expect(coordinator.state == .running)
+    }
+
+    @Test func deferredAlertClearedOnDisable() {
+        let coordinator = AppCoordinator(isEnabled: true)
+        coordinator.transition(.menuOpened)
+        coordinator.transition(.timerReachedZero)
+        #expect(coordinator.deferredWalkAlert)
+
+        coordinator.transition(.disableRequested)
+        #expect(!coordinator.deferredWalkAlert)
+        #expect(coordinator.state == .disabled)
+    }
+
+    @Test func deferredAlertClearedOnReset() {
+        let coordinator = AppCoordinator(isEnabled: true)
+        coordinator.transition(.menuOpened)
+        coordinator.transition(.timerReachedZero)
+        #expect(coordinator.deferredWalkAlert)
+
+        coordinator.transition(.resetRequested)
+        #expect(!coordinator.deferredWalkAlert)
+        #expect(coordinator.state == .running)
+    }
+
+    @Test func deferredAlertTransferredToConfirmingPresence() {
+        let coordinator = AppCoordinator(isEnabled: true)
+
+        // Defer a walk alert while menu is open
+        coordinator.transition(.menuOpened)
+        coordinator.transition(.timerReachedZero)
+        #expect(coordinator.deferredWalkAlert)
+
+        // Close menu but before alert fires, idle kicks in
+        // Actually: the deferred flag is still set, and idle fires while running
+        coordinator.transition(.menuClosed)
+        // menuClosed fires the deferred alert -> walkAlert state
+        #expect(coordinator.state == .walkAlert)
+
+        // Let's test the transfer differently: deferred + idle while menu still open
+        let c2 = AppCoordinator(isEnabled: true)
+        c2.transition(.menuOpened)
+        c2.transition(.timerReachedZero)
+        #expect(c2.deferredWalkAlert)
+        #expect(c2.state == .running)
+
+        // Idle fires while menu is open and deferred flag is set
+        let idleEffects = c2.transition(.idleThresholdReached(showStillThereDialog: true))
+        #expect(idleEffects == [.showStillThere])
+        #expect(c2.state == .confirmingPresence(previous: .running, pendingWalkAlert: true))
+        #expect(!c2.deferredWalkAlert, "Deferred flag should transfer to pendingWalkAlert")
+
+        // Activity resolves -> should show walk alert
+        let activityEffects = c2.transition(.activityDetected)
+        #expect(activityEffects == [.dismissStillThere, .markPresent, .showWalkAlert])
+        #expect(c2.state == .walkAlert)
+    }
+
     // MARK: - Edge Cases
 
     @Test func veryShortIntervalsWorkCorrectly() {
