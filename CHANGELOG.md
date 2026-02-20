@@ -1,5 +1,14 @@
 # Changelog
 
+## Version 1.19
+
+- Refactored MenuBarController into focused single-responsibility files
+- Walk alert is now truly modal: keystrokes beep, clicks on other apps beep and yank focus back
+- Settings now pauses everything (timer and idle detection stop while open)
+- About and Debug Log windows no longer fight with the walk alert
+- Walk alert defers while any app window is open, comes back when it closes
+- Added 37 unit tests covering all state machine transitions
+
 ## Version 1.18
 
 - Added explicit AppCoordinator state machine (`State`/`Event`/`Effect`) for transition-driven behavior
