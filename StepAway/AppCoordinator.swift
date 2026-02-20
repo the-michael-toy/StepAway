@@ -22,10 +22,12 @@ final class AppCoordinator {
 
     enum Event: Equatable {
         case timerReachedZero
+        case alertActionGettingUpToWalk
         case alertActionFiveMoreMinutes
         case alertActionLastTaskThenBreak
         case idleThresholdReached(showStillThereDialog: Bool)
         case activityDetected
+        case congratsTimedOut
         case stillThereTimeout
         case disableRequested
         case enableRequested
@@ -41,6 +43,8 @@ final class AppCoordinator {
     enum Effect: Equatable {
         case showWalkAlert
         case dismissWalkAlert
+        case showCongrats
+        case dismissCongrats
         case showStillThere
         case dismissStillThere
         case markPresent
@@ -56,6 +60,7 @@ final class AppCoordinator {
     private(set) var isMenuOpen = false
     private(set) var isSettingsOpen = false
     private(set) var deferredWalkAlert = false
+    private(set) var isCongratsShowing = false
     private(set) var auxiliaryWindowCount = 0
     var uiSurfaceActive: Bool { isMenuOpen || isSettingsOpen || auxiliaryWindowCount > 0 }
 
@@ -132,12 +137,14 @@ final class AppCoordinator {
         case (_, .disableRequested):
             state = .disabled
             deferredWalkAlert = false
-            return [.dismissWalkAlert, .dismissStillThere, .disableTimer, .markPresent]
+            isCongratsShowing = false
+            return [.dismissWalkAlert, .dismissStillThere, .dismissCongrats, .disableTimer, .markPresent]
 
         case (_, .resetRequested):
             state = .running
             deferredWalkAlert = false
-            return [.dismissWalkAlert, .dismissStillThere, .markPresent, .resetTimer]
+            isCongratsShowing = false
+            return [.dismissWalkAlert, .dismissStillThere, .dismissCongrats, .markPresent, .resetTimer]
 
         case (.running, .timerReachedZero), (.snoozed, .timerReachedZero):
             if uiSurfaceActive {
@@ -146,6 +153,11 @@ final class AppCoordinator {
             }
             state = .walkAlert
             return [.showWalkAlert]
+
+        case (.walkAlert, .alertActionGettingUpToWalk):
+            state = .away
+            isCongratsShowing = true
+            return [.dismissWalkAlert, .showCongrats, .markAwayAndPause]
 
         case (.walkAlert, .alertActionFiveMoreMinutes):
             state = .snoozed
@@ -211,8 +223,13 @@ final class AppCoordinator {
             return [.markAwayAndPause]
 
         case (.away, .activityDetected):
+            if isCongratsShowing { return [] }
             state = .running
             return [.markPresent, .resetTimer]
+
+        case (_, .congratsTimedOut):
+            isCongratsShowing = false
+            return [.dismissCongrats]
 
         default:
             return []
@@ -254,6 +271,8 @@ final class AppCoordinator {
         switch event {
         case .timerReachedZero:
             return "timerReachedZero"
+        case .alertActionGettingUpToWalk:
+            return "alertActionGettingUpToWalk"
         case .alertActionFiveMoreMinutes:
             return "alertActionFiveMoreMinutes"
         case .alertActionLastTaskThenBreak:
@@ -262,6 +281,8 @@ final class AppCoordinator {
             return "idleThresholdReached(showStillThereDialog:\(showStillThereDialog))"
         case .activityDetected:
             return "activityDetected"
+        case .congratsTimedOut:
+            return "congratsTimedOut"
         case .stillThereTimeout:
             return "stillThereTimeout"
         case .disableRequested:
@@ -291,6 +312,10 @@ final class AppCoordinator {
             return "showWalkAlert"
         case .dismissWalkAlert:
             return "dismissWalkAlert"
+        case .showCongrats:
+            return "showCongrats"
+        case .dismissCongrats:
+            return "dismissCongrats"
         case .showStillThere:
             return "showStillThere"
         case .dismissStillThere:

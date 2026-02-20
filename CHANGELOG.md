@@ -1,5 +1,13 @@
 # Changelog
 
+## Version 1.20
+
+- Added "This is me, getting up to walk" as the default walk alert button
+- Clicking it shows a 60-second congratulatory modal that blocks all interaction
+- Activity is ignored while the congrats modal is visible (no accidental timer reset on the way out)
+- Walk alert now has three buttons: walk, snooze 5 min, or grind it out
+- Added 4 unit tests for new congrats state machine transitions
+
 ## Version 1.19
 
 - Refactored MenuBarController into focused single-responsibility files

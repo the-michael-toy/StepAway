@@ -23,6 +23,7 @@ class MenuBarController: NSObject, NSMenuDelegate {
     private var debugLogController: DebugLogWindowController!
 
     private let walkAlertController = WalkAlertController()
+    private let congratsController = CongratsController()
 
     private var isRunningFromApplications: Bool {
         let bundlePath = Bundle.main.bundlePath
@@ -45,11 +46,17 @@ class MenuBarController: NSObject, NSMenuDelegate {
         stillThereController.onTimeout = { [weak self] in
             self?.handle(event: .stillThereTimeout)
         }
+        walkAlertController.onGettingUpToWalk = { [weak self] in
+            self?.handle(event: .alertActionGettingUpToWalk)
+        }
         walkAlertController.onFiveMoreMinutes = { [weak self] in
             self?.handle(event: .alertActionFiveMoreMinutes)
         }
         walkAlertController.onLastTaskThenBreak = { [weak self] in
             self?.handle(event: .alertActionLastTaskThenBreak)
+        }
+        congratsController.onTimeout = { [weak self] in
+            self?.handle(event: .congratsTimedOut)
         }
         setupStatusItem()
         setupTimerManager()
@@ -127,6 +134,10 @@ class MenuBarController: NSObject, NSMenuDelegate {
             walkAlertController.show()
         case .dismissWalkAlert:
             walkAlertController.dismiss()
+        case .showCongrats:
+            congratsController.show()
+        case .dismissCongrats:
+            congratsController.dismiss()
         case .showStillThere:
             stillThereController.show()
         case .dismissStillThere:
@@ -345,6 +356,7 @@ class MenuBarController: NSObject, NSMenuDelegate {
 
     @objc private func quitApp() {
         walkAlertController.dismiss()
+        congratsController.dismiss()
         NSApplication.shared.terminate(nil)
     }
 

@@ -10,6 +10,7 @@ final class WalkAlertController {
     private var globalMouseMonitor: Any?
     private var activationObserver: NSObjectProtocol?
 
+    var onGettingUpToWalk: (() -> Void)?
     var onFiveMoreMinutes: (() -> Void)?
     var onLastTaskThenBreak: (() -> Void)?
 
@@ -20,15 +21,18 @@ final class WalkAlertController {
 
         let alert = NSAlert()
         alert.messageText = "Time to Step Away!"
-        alert.informativeText = "Choose \"Last task, then break\" to pause reminders until you take a break and return."
+        alert.informativeText = "Choose \"Last task, I have to grind this out\" to pause reminders until you take a break and return."
         alert.alertStyle = .informational
+        alert.addButton(withTitle: "This is me, getting up to walk")
         alert.addButton(withTitle: "5 more minutes")
-        alert.addButton(withTitle: "Last task, then break")
+        alert.addButton(withTitle: "Last task, I have to grind this out")
 
         alert.buttons[0].target = self
-        alert.buttons[0].action = #selector(fiveMoreMinutesTapped)
+        alert.buttons[0].action = #selector(gettingUpToWalkTapped)
         alert.buttons[1].target = self
-        alert.buttons[1].action = #selector(lastTaskTapped)
+        alert.buttons[1].action = #selector(fiveMoreMinutesTapped)
+        alert.buttons[2].target = self
+        alert.buttons[2].action = #selector(lastTaskTapped)
 
         alert.layout()
 
@@ -41,7 +45,7 @@ final class WalkAlertController {
         walkAlertPanel = panel
 
         // Intercept keystrokes: let the panel handle its button key equivalents
-        // (Return for "5 more minutes"), beep and swallow everything else.
+        // (Return for "This is me, getting up to walk"), beep and swallow everything else.
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let panel = self?.walkAlertPanel else { return event }
             if panel.performKeyEquivalent(with: event) {
@@ -142,6 +146,10 @@ final class WalkAlertController {
         }
         walkAlertPanel?.close()
         walkAlertPanel = nil
+    }
+
+    @objc private func gettingUpToWalkTapped() {
+        onGettingUpToWalk?()
     }
 
     @objc private func fiveMoreMinutesTapped() {

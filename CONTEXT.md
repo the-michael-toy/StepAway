@@ -8,7 +8,8 @@ A macOS menu bar app that reminds you to take walking breaks.
 - Displays a working icon (🧑‍💻) in the menu bar with a countdown timer
 - Default timer: 90 minutes
 - When timer reaches zero, shows an alert dialog telling the user to take a walk
-- Alert has two options: "5 more minutes" or "Last task, then break"
+- Alert has three options: "This is me, getting up to walk" (default), "5 more minutes", or "Last task, I have to grind this out"
+- "This is me, getting up to walk" dismisses the alert, shows a 60-second congratulatory modal, and marks user as away
 - "Last task, then break" pauses reminders until one away -> return cycle is detected
 - If user goes idle while walk alert is showing, alert auto-dismisses (they already stepped away)
 - If `Still there?` is currently visible when the walk timer expires, the walk alert is deferred until presence check resolves (activity -> show alert, timeout -> away)
@@ -64,6 +65,7 @@ StepAway/
 │   ├── DebugEventLog.swift            # In-memory ring buffer for debug records
 │   ├── MenuBarController.swift        # Wiring: events → coordinator → effects → controllers
 │   ├── WalkAlertController.swift      # Walk alert lifecycle + modal key/mouse monitors
+│   ├── CongratsController.swift       # Congrats modal (60s auto-dismiss, non-dismissable)
 │   ├── StillThereController.swift     # "Still there?" window + timers + focus restore
 │   ├── AboutWindowController.swift    # About window
 │   ├── DebugLogWindowController.swift # Debug Log viewer window
@@ -165,11 +167,12 @@ Most of this spec is now implemented; keep it as the canonical transition refere
 
 ### UX Decisions Locked In
 
-- Walk alert has exactly two buttons:
+- Walk alert has exactly three buttons:
+  - `This is me, getting up to walk` (default, Return key)
   - `5 more minutes`
-  - `Last task, then break`
-- `Last task, then break` means: pause reminders now, then automatically resume normal behavior after one away -> return cycle.
-- There is no explicit "I'm walking now" button; walking away is inferred from inactivity.
+  - `Last task, I have to grind this out`
+- `This is me, getting up to walk` means: dismiss the alert, show a 60-second non-dismissable congratulatory modal, and mark the user as away. Activity is ignored while the congrats modal is visible.
+- `Last task, I have to grind this out` means: pause reminders now, then automatically resume normal behavior after one away -> return cycle.
 
 ### Primary Goals
 
@@ -192,8 +195,10 @@ Use a single coordinator state enum:
 ### Events
 
 - `timerReachedZero`
+- `alertActionGettingUpToWalk`
 - `alertActionFiveMoreMinutes`
 - `alertActionLastTaskThenBreak`
+- `congratsTimedOut`
 - `idleThresholdReached`
 - `activityDetected`
 - `stillThereTimeout`
@@ -214,6 +219,7 @@ Use a single coordinator state enum:
 | `running` or `snoozed` | `timerReachedZero` (UI surface active) | same | Set `deferredWalkAlert=true` |
 | `running` | `timerReachedZero` (no UI surface) | `walkAlert` | Show walk alert |
 | `snoozed` | `timerReachedZero` (no UI surface) | `walkAlert` | Show walk alert |
+| `walkAlert` | `alertActionGettingUpToWalk` | `away` | Close alert, show congrats modal, mark away; `isCongratsShowing=true` |
 | `walkAlert` | `alertActionFiveMoreMinutes` | `snoozed` | Set timer to 5:00, close alert |
 | `walkAlert` | `alertActionLastTaskThenBreak` | `pausedUntilBreak` | Pause timer display, close alert |
 | `walkAlert` | `idleThresholdReached` | `away` | Auto-dismiss alert, mark away |
@@ -224,10 +230,12 @@ Use a single coordinator state enum:
 | `confirmingPresence` | `stillThereTimeout` | `away` | Close window, mark away |
 | `pausedUntilBreak` | `activityDetected` | `pausedUntilBreak` | Ignore activity for reminder purposes |
 | `pausedUntilBreak` | `idleThresholdReached` | `confirmingPresence` or `away` | Show "Still there?" if enabled; timeout then marks away |
-| `away` | `activityDetected` | `running` | Reset timer to full interval, clear away/paused flags |
-| any non-`disabled` state | `disableRequested` | `disabled` | Close modal windows, stop timer, clear `deferredWalkAlert` |
+| `away` | `activityDetected` (`isCongratsShowing`) | `away` | Ignore activity while congrats modal is visible |
+| `away` | `activityDetected` (no congrats) | `running` | Reset timer to full interval, clear away/paused flags |
+| any | `congratsTimedOut` | same | `isCongratsShowing=false`, dismiss congrats modal |
+| any non-`disabled` state | `disableRequested` | `disabled` | Close modal windows (including congrats), stop timer, clear `deferredWalkAlert` and `isCongratsShowing` |
 | `disabled` | `enableRequested` | `running` | Reset timer to full interval, start timer |
-| any non-`disabled` state | `resetRequested` | `running` | Reset timer to full interval, clear `deferredWalkAlert` |
+| any non-`disabled` state | `resetRequested` | `running` | Reset timer to full interval, clear `deferredWalkAlert` and `isCongratsShowing`, dismiss congrats |
 | any | `menuOpened` (non-walkAlert) | same | Set `isMenuOpen=true` |
 | any | `menuClosed` | same | Set `isMenuOpen=false`; if deferred and no UI surface active, fire walk alert |
 | any | `settingsOpened` (walkAlert) | `running` | Dismiss alert, set `deferredWalkAlert=true`; MenuBarController stops timer + activity monitor |
@@ -348,6 +356,16 @@ The walk alert uses a modal-level panel (`.modalPanel`, level 8) with event moni
 - **No run loop blocking:** TimerManager, ActivityMonitor, and menu delegate all work normally during the walk alert.
 
 Three earlier approaches (`runModal`, deferred `runModal`, floating panel without mouse monitor) were tried and abandoned. See git history for details.
+
+### Congrats Modal (CongratsController)
+
+When the user clicks "This is me, getting up to walk", a congratulatory modal appears:
+- Shows "Nice! Go take your walk." with subtitle "See you when you get back."
+- Has a 60-second progress bar (same pattern as StillThereController)
+- Non-dismissable: same modal-level + key/mouse/global monitors as the walk alert
+- No buttons — auto-dismisses after 60 seconds via `onTimeout` callback
+- While visible, `isCongratsShowing=true` in the coordinator causes activity events to be ignored (user can't accidentally reset the timer by bumping the mouse on the way out)
+- `congratsTimedOut` clears the flag and dismisses the modal; the app remains in `away` state until true activity is detected
 
 ### UI State Deferral
 

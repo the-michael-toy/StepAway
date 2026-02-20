@@ -68,11 +68,64 @@ struct StepAwayTests {
 
         let disableEffects = coordinator.transition(.disableRequested)
         #expect(coordinator.state == .disabled)
-        #expect(disableEffects == [.dismissWalkAlert, .dismissStillThere, .disableTimer, .markPresent])
+        #expect(disableEffects == [.dismissWalkAlert, .dismissStillThere, .dismissCongrats, .disableTimer, .markPresent])
 
         let enableEffects = coordinator.transition(.enableRequested)
         #expect(coordinator.state == .running)
         #expect(enableEffects == [.enableTimer, .markPresent, .resetTimer])
+    }
+
+    @Test func gettingUpToWalkTransitionsToAwayWithCongrats() {
+        let coordinator = AppCoordinator(isEnabled: true)
+        _ = coordinator.transition(.timerReachedZero)
+        #expect(coordinator.state == .walkAlert)
+
+        let effects = coordinator.transition(.alertActionGettingUpToWalk)
+        #expect(coordinator.state == .away)
+        #expect(coordinator.isCongratsShowing)
+        #expect(effects == [.dismissWalkAlert, .showCongrats, .markAwayAndPause])
+    }
+
+    @Test func activityIgnoredWhileCongratsShowing() {
+        let coordinator = AppCoordinator(isEnabled: true)
+        _ = coordinator.transition(.timerReachedZero)
+        _ = coordinator.transition(.alertActionGettingUpToWalk)
+        #expect(coordinator.state == .away)
+        #expect(coordinator.isCongratsShowing)
+
+        let effects = coordinator.transition(.activityDetected)
+        #expect(coordinator.state == .away, "Activity should be ignored while congrats is showing")
+        #expect(effects.isEmpty)
+        #expect(coordinator.isCongratsShowing)
+    }
+
+    @Test func congratsTimedOutClearsFlagAndDismisses() {
+        let coordinator = AppCoordinator(isEnabled: true)
+        _ = coordinator.transition(.timerReachedZero)
+        _ = coordinator.transition(.alertActionGettingUpToWalk)
+
+        let effects = coordinator.transition(.congratsTimedOut)
+        #expect(!coordinator.isCongratsShowing)
+        #expect(coordinator.state == .away)
+        #expect(effects == [.dismissCongrats])
+
+        // Now activity should work normally
+        let returnEffects = coordinator.transition(.activityDetected)
+        #expect(coordinator.state == .running)
+        #expect(returnEffects == [.markPresent, .resetTimer])
+    }
+
+    @Test func resetDuringCongratsClearsCongratsFlag() {
+        let coordinator = AppCoordinator(isEnabled: true)
+        _ = coordinator.transition(.timerReachedZero)
+        _ = coordinator.transition(.alertActionGettingUpToWalk)
+        #expect(coordinator.isCongratsShowing)
+
+        let effects = coordinator.transition(.resetRequested)
+        #expect(coordinator.state == .running)
+        #expect(!coordinator.isCongratsShowing)
+        #expect(effects.contains(.dismissCongrats))
+        #expect(effects.contains(.resetTimer))
     }
 
     // MARK: - Test 1: Walk reminder appears after timer expires with activity
