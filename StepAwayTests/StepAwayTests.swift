@@ -86,7 +86,7 @@ struct StepAwayTests {
         #expect(effects == [.dismissWalkAlert, .showCongrats, .markAwayAndPause])
     }
 
-    @Test func activityIgnoredWhileCongratsShowing() {
+    @Test func activityReAssertsAwayWhileCongratsShowing() {
         let coordinator = AppCoordinator(isEnabled: true)
         _ = coordinator.transition(.timerReachedZero)
         _ = coordinator.transition(.alertActionGettingUpToWalk)
@@ -94,8 +94,8 @@ struct StepAwayTests {
         #expect(coordinator.isCongratsShowing)
 
         let effects = coordinator.transition(.activityDetected)
-        #expect(coordinator.state == .away, "Activity should be ignored while congrats is showing")
-        #expect(effects.isEmpty)
+        #expect(coordinator.state == .away, "Should stay away while congrats is showing")
+        #expect(effects == [.markAwayAndPause], "Should re-assert away to keep ActivityMonitor in sync")
         #expect(coordinator.isCongratsShowing)
     }
 

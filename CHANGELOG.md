@@ -1,5 +1,11 @@
 # Changelog
 
+## Version 1.21
+
+- Fixed bug where timer could get stuck in "away" state after using "Getting up to walk"
+- The ActivityMonitor and AppCoordinator could desync if mouse movement was detected while the congrats modal was showing, causing the app to never detect the user's return
+- Activity during congrats now re-asserts the away state to keep the ActivityMonitor in sync
+
 ## Version 1.20
 
 - Added "This is me, getting up to walk" as the default walk alert button

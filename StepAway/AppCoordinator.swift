@@ -223,7 +223,7 @@ final class AppCoordinator {
             return [.markAwayAndPause]
 
         case (.away, .activityDetected):
-            if isCongratsShowing { return [] }
+            if isCongratsShowing { return [.markAwayAndPause] }
             state = .running
             return [.markPresent, .resetTimer]
 
