@@ -214,37 +214,7 @@ Use a single coordinator state enum:
 
 ### Transition Rules
 
-| Current State | Event | Next State | Actions |
-|---|---|---|---|
-| `running` or `snoozed` | `timerReachedZero` (UI surface active) | same | Set `deferredWalkAlert=true` |
-| `running` | `timerReachedZero` (no UI surface) | `walkAlert` | Show walk alert |
-| `snoozed` | `timerReachedZero` (no UI surface) | `walkAlert` | Show walk alert |
-| `walkAlert` | `alertActionGettingUpToWalk` | `away` | Close alert, show congrats modal, mark away; `isCongratsShowing=true` |
-| `walkAlert` | `alertActionFiveMoreMinutes` | `snoozed` | Set timer to 5:00, close alert |
-| `walkAlert` | `alertActionLastTaskThenBreak` | `pausedUntilBreak` | Pause timer display, close alert |
-| `walkAlert` | `idleThresholdReached` | `away` | Auto-dismiss alert, mark away |
-| `walkAlert` | `menuOpened` | `running` | Dismiss alert, set `deferredWalkAlert=true` (alert returns when menu closes) |
-| `running` or `snoozed` | `idleThresholdReached` | `confirmingPresence` or `away` | Show "Still there?" if enabled, otherwise mark away; transfers `deferredWalkAlert` to `pendingWalkAlert` |
-| `confirmingPresence` | `timerReachedZero` | `confirmingPresence` | Set `pendingWalkAlert=true` (do not show walk alert yet) |
-| `confirmingPresence` | `activityDetected` | `running` / `snoozed` / `pausedUntilBreak` / `walkAlert` | Close window; if `pendingWalkAlert=true`, show walk alert; otherwise return to prior mode |
-| `confirmingPresence` | `stillThereTimeout` | `away` | Close window, mark away |
-| `pausedUntilBreak` | `activityDetected` | `pausedUntilBreak` | Ignore activity for reminder purposes |
-| `pausedUntilBreak` | `idleThresholdReached` | `confirmingPresence` or `away` | Show "Still there?" if enabled; timeout then marks away |
-| `away` | `activityDetected` (`isCongratsShowing`) | `away` | Ignore activity while congrats modal is visible |
-| `away` | `activityDetected` (no congrats) | `running` | Reset timer to full interval, clear away/paused flags |
-| any | `congratsTimedOut` | same | `isCongratsShowing=false`, dismiss congrats modal |
-| any non-`disabled` state | `disableRequested` | `disabled` | Close modal windows (including congrats), stop timer, clear `deferredWalkAlert` and `isCongratsShowing` |
-| `disabled` | `enableRequested` | `running` | Reset timer to full interval, start timer |
-| any non-`disabled` state | `resetRequested` | `running` | Reset timer to full interval, clear `deferredWalkAlert` and `isCongratsShowing`, dismiss congrats |
-| any | `menuOpened` (non-walkAlert) | same | Set `isMenuOpen=true` |
-| any | `menuClosed` | same | Set `isMenuOpen=false`; if deferred and no UI surface active, fire walk alert |
-| any | `settingsOpened` (walkAlert) | `running` | Dismiss alert, set `deferredWalkAlert=true`; MenuBarController stops timer + activity monitor |
-| any | `settingsOpened` (confirmingPresence) | previous | Dismiss still there, mark present; transfer `pendingWalkAlert` to `deferredWalkAlert` |
-| any | `settingsOpened` (other) | same | Set `isSettingsOpen=true`; MenuBarController stops timer + activity monitor |
-| any | `settingsClosed` | same | Set `isSettingsOpen=false`; if deferred and no UI surface active, fire walk alert; MenuBarController restarts activity monitor and resets timer (unless walk alert just fired) |
-| any | `auxiliaryWindowOpened` (walkAlert) | `running` | Dismiss alert, set `deferredWalkAlert=true`, increment `auxiliaryWindowCount` |
-| any | `auxiliaryWindowOpened` (other) | same | Increment `auxiliaryWindowCount` |
-| any | `auxiliaryWindowClosed` | same | Decrement `auxiliaryWindowCount`; if deferred and no UI surface active, fire walk alert |
+The authoritative source for all state transitions is the `transition(_ event: Event) -> [Effect]` function in `AppCoordinator.swift`. Read the code directly rather than maintaining a duplicate table here.
 
 ### Display Mapping (Proposed)
 
