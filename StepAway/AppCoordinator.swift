@@ -22,7 +22,7 @@ final class AppCoordinator {
 
     enum Event: Equatable {
         case timerReachedZero
-        case alertActionGettingUpToWalk
+        case gettingUpToWalk
         case alertActionFiveMoreMinutes
         case alertActionLastTaskThenBreak
         case idleThresholdReached(showStillThereDialog: Bool)
@@ -154,7 +154,7 @@ final class AppCoordinator {
             state = .walkAlert
             return [.showWalkAlert]
 
-        case (.walkAlert, .alertActionGettingUpToWalk):
+        case (.walkAlert, .gettingUpToWalk):
             state = .away
             isCongratsShowing = true
             return [.dismissWalkAlert, .showCongrats, .markAwayAndPause]
@@ -166,6 +166,14 @@ final class AppCoordinator {
         case (.walkAlert, .alertActionLastTaskThenBreak):
             state = .pausedUntilBreak
             return [.dismissWalkAlert, .pauseUntilBreak]
+
+        case (.running, .gettingUpToWalk),
+             (.snoozed, .gettingUpToWalk),
+             (.pausedUntilBreak, .gettingUpToWalk):
+            state = .away
+            isCongratsShowing = true
+            deferredWalkAlert = false
+            return [.showCongrats, .markAwayAndPause]
 
         case (.walkAlert, .idleThresholdReached):
             state = .away
@@ -271,8 +279,8 @@ final class AppCoordinator {
         switch event {
         case .timerReachedZero:
             return "timerReachedZero"
-        case .alertActionGettingUpToWalk:
-            return "alertActionGettingUpToWalk"
+        case .gettingUpToWalk:
+            return "gettingUpToWalk"
         case .alertActionFiveMoreMinutes:
             return "alertActionFiveMoreMinutes"
         case .alertActionLastTaskThenBreak:

@@ -195,7 +195,7 @@ Use a single coordinator state enum:
 ### Events
 
 - `timerReachedZero`
-- `alertActionGettingUpToWalk`
+- `gettingUpToWalk`
 - `alertActionFiveMoreMinutes`
 - `alertActionLastTaskThenBreak`
 - `congratsTimedOut`

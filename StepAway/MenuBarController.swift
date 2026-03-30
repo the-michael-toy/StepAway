@@ -15,6 +15,8 @@ class MenuBarController: NSObject, NSMenuDelegate {
     private var launchAtLoginMenuItem: NSMenuItem!
     private var debugLogMenuItem: NSMenuItem!
     private var debugLogSeparatorMenuItem: NSMenuItem!
+    private var gettingUpToWalkSeparatorMenuItem: NSMenuItem!
+    private var gettingUpToWalkMenuItem: NSMenuItem!
 
     // Windows
     private var settingsWindowController: SettingsWindowController?
@@ -47,7 +49,7 @@ class MenuBarController: NSObject, NSMenuDelegate {
             self?.handle(event: .stillThereTimeout)
         }
         walkAlertController.onGettingUpToWalk = { [weak self] in
-            self?.handle(event: .alertActionGettingUpToWalk)
+            self?.handle(event: .gettingUpToWalk)
         }
         walkAlertController.onFiveMoreMinutes = { [weak self] in
             self?.handle(event: .alertActionFiveMoreMinutes)
@@ -238,6 +240,19 @@ class MenuBarController: NSObject, NSMenuDelegate {
         resetItem.target = self
         menu.addItem(resetItem)
 
+        gettingUpToWalkSeparatorMenuItem = NSMenuItem.separator()
+        gettingUpToWalkSeparatorMenuItem.isHidden = true
+        menu.addItem(gettingUpToWalkSeparatorMenuItem)
+
+        gettingUpToWalkMenuItem = NSMenuItem(
+            title: "We're walking, We're walking ...",
+            action: #selector(gettingUpToWalk),
+            keyEquivalent: ""
+        )
+        gettingUpToWalkMenuItem.target = self
+        gettingUpToWalkMenuItem.isHidden = true
+        menu.addItem(gettingUpToWalkMenuItem)
+
         menu.addItem(NSMenuItem.separator())
 
         // Hidden debug log item (revealed only when Option is held while opening menu)
@@ -354,6 +369,10 @@ class MenuBarController: NSObject, NSMenuDelegate {
         handle(event: .resetRequested)
     }
 
+    @objc private func gettingUpToWalk() {
+        handle(event: .gettingUpToWalk)
+    }
+
     @objc private func quitApp() {
         walkAlertController.dismiss()
         congratsController.dismiss()
@@ -362,6 +381,9 @@ class MenuBarController: NSObject, NSMenuDelegate {
 
     func menuWillOpen(_ menu: NSMenu) {
         handle(event: .menuOpened)
+        let shouldShowWalk = coordinator.state == .running || coordinator.state == .snoozed || coordinator.state == .pausedUntilBreak
+        gettingUpToWalkMenuItem.isHidden = !shouldShowWalk
+        gettingUpToWalkSeparatorMenuItem.isHidden = !shouldShowWalk
         let shouldShowDebug = isOptionKeyPressed()
         debugLogMenuItem.isHidden = !shouldShowDebug
         debugLogSeparatorMenuItem.isHidden = !shouldShowDebug

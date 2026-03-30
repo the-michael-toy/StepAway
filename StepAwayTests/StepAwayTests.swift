@@ -80,16 +80,80 @@ struct StepAwayTests {
         _ = coordinator.transition(.timerReachedZero)
         #expect(coordinator.state == .walkAlert)
 
-        let effects = coordinator.transition(.alertActionGettingUpToWalk)
+        let effects = coordinator.transition(.gettingUpToWalk)
         #expect(coordinator.state == .away)
         #expect(coordinator.isCongratsShowing)
         #expect(effects == [.dismissWalkAlert, .showCongrats, .markAwayAndPause])
     }
 
+    @Test func gettingUpToWalkFromRunningTransitionsToAway() {
+        let coordinator = AppCoordinator(isEnabled: true)
+        #expect(coordinator.state == .running)
+
+        let effects = coordinator.transition(.gettingUpToWalk)
+        #expect(coordinator.state == .away)
+        #expect(coordinator.isCongratsShowing)
+        #expect(effects == [.showCongrats, .markAwayAndPause])
+    }
+
+    @Test func gettingUpToWalkFromSnoozedTransitionsToAway() {
+        let coordinator = AppCoordinator(isEnabled: true)
+        _ = coordinator.transition(.timerReachedZero)
+        _ = coordinator.transition(.alertActionFiveMoreMinutes)
+        #expect(coordinator.state == .snoozed)
+
+        let effects = coordinator.transition(.gettingUpToWalk)
+        #expect(coordinator.state == .away)
+        #expect(coordinator.isCongratsShowing)
+        #expect(effects == [.showCongrats, .markAwayAndPause])
+    }
+
+    @Test func gettingUpToWalkFromPausedUntilBreakTransitionsToAway() {
+        let coordinator = AppCoordinator(isEnabled: true)
+        _ = coordinator.transition(.timerReachedZero)
+        _ = coordinator.transition(.alertActionLastTaskThenBreak)
+        #expect(coordinator.state == .pausedUntilBreak)
+
+        let effects = coordinator.transition(.gettingUpToWalk)
+        #expect(coordinator.state == .away)
+        #expect(coordinator.isCongratsShowing)
+        #expect(effects == [.showCongrats, .markAwayAndPause])
+    }
+
+    @Test func fullCycleWalkAlertToLastTaskToGettingUpToWalk() {
+        let coordinator = AppCoordinator(isEnabled: true)
+
+        // Timer fires → walk alert
+        let alertEffects = coordinator.transition(.timerReachedZero)
+        #expect(coordinator.state == .walkAlert)
+        #expect(alertEffects == [.showWalkAlert])
+
+        // User clicks "Last task" → pausedUntilBreak
+        let lastTaskEffects = coordinator.transition(.alertActionLastTaskThenBreak)
+        #expect(coordinator.state == .pausedUntilBreak)
+        #expect(lastTaskEffects == [.dismissWalkAlert, .pauseUntilBreak])
+
+        // User clicks "We're walking" menu item → away with congrats
+        let walkEffects = coordinator.transition(.gettingUpToWalk)
+        #expect(coordinator.state == .away)
+        #expect(coordinator.isCongratsShowing)
+        #expect(walkEffects == [.showCongrats, .markAwayAndPause])
+
+        // Congrats times out
+        let congratsEffects = coordinator.transition(.congratsTimedOut)
+        #expect(!coordinator.isCongratsShowing)
+        #expect(congratsEffects == [.dismissCongrats])
+
+        // User returns → running
+        let returnEffects = coordinator.transition(.activityDetected)
+        #expect(coordinator.state == .running)
+        #expect(returnEffects == [.markPresent, .resetTimer])
+    }
+
     @Test func activityReAssertsAwayWhileCongratsShowing() {
         let coordinator = AppCoordinator(isEnabled: true)
         _ = coordinator.transition(.timerReachedZero)
-        _ = coordinator.transition(.alertActionGettingUpToWalk)
+        _ = coordinator.transition(.gettingUpToWalk)
         #expect(coordinator.state == .away)
         #expect(coordinator.isCongratsShowing)
 
@@ -102,7 +166,7 @@ struct StepAwayTests {
     @Test func congratsTimedOutClearsFlagAndDismisses() {
         let coordinator = AppCoordinator(isEnabled: true)
         _ = coordinator.transition(.timerReachedZero)
-        _ = coordinator.transition(.alertActionGettingUpToWalk)
+        _ = coordinator.transition(.gettingUpToWalk)
 
         let effects = coordinator.transition(.congratsTimedOut)
         #expect(!coordinator.isCongratsShowing)
@@ -118,7 +182,7 @@ struct StepAwayTests {
     @Test func resetDuringCongratsClearsCongratsFlag() {
         let coordinator = AppCoordinator(isEnabled: true)
         _ = coordinator.transition(.timerReachedZero)
-        _ = coordinator.transition(.alertActionGettingUpToWalk)
+        _ = coordinator.transition(.gettingUpToWalk)
         #expect(coordinator.isCongratsShowing)
 
         let effects = coordinator.transition(.resetRequested)

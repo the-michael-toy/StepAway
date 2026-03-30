@@ -1,5 +1,11 @@
 # Changelog
 
+## Version 1.22
+
+- Added always-visible "We're walking, We're walking ..." menu item so you can tell StepAway you're getting up to walk at any time, not just from the walk alert
+- Available in running, snoozed, and paused-until-break states
+- Renamed `alertActionGettingUpToWalk` event to `gettingUpToWalk` to reflect broader usage
+
 ## Version 1.21
 
 - Fixed bug where timer could get stuck in "away" state after using "Getting up to walk"
