@@ -2,6 +2,7 @@
 // This file is part of StepAway - https://github.com/the-michael-toy/StepAway
 
 import AppKit
+import ServiceManagement
 
 class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
@@ -22,7 +23,6 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         10800    // 180 minutes
     ]
 
-    private var enabledCheckbox: NSButton!
     private var timerSlider: NSSlider!
     private var timerLabel: NSTextField!
     private var idleSlider: NSSlider!
@@ -31,6 +31,7 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private var playSoundCheckbox: NSButton!
     private var soundPopup: NSPopUpButton!
     private var testSoundButton: NSButton!
+    private var launchAtLoginCheckbox: NSButton!
 
     private var availableSounds: [String] = []
 
@@ -72,6 +73,11 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         }
     }
 
+    private var isRunningFromApplications: Bool {
+        let bundlePath = Bundle.main.bundlePath
+        return bundlePath.hasPrefix("/Applications/")
+    }
+
     private func setupUI() {
         guard let window = window else { return }
 
@@ -80,13 +86,7 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
         var y: CGFloat = 290
 
-        // Enabled checkbox
-        enabledCheckbox = NSButton(checkboxWithTitle: "Enable StepAway", target: self, action: #selector(enabledChanged))
-        enabledCheckbox.frame = NSRect(x: 20, y: y, width: 250, height: 20)
-        contentView.addSubview(enabledCheckbox)
-
         // --- Reminder interval section ---
-        y -= 40
 
         let timerTitleLabel = NSTextField(labelWithString: "Reminder interval:")
         timerTitleLabel.frame = NSRect(x: 20, y: y, width: 120, height: 17)
@@ -185,6 +185,21 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         testSoundButton.action = #selector(testSound)
         contentView.addSubview(testSoundButton)
 
+        // --- Launch at Login ---
+        y -= 40
+
+        launchAtLoginCheckbox = NSButton(
+            checkboxWithTitle: "Launch at Login",
+            target: self,
+            action: #selector(launchAtLoginChanged)
+        )
+        launchAtLoginCheckbox.frame = NSRect(x: 20, y: y, width: 250, height: 20)
+        launchAtLoginCheckbox.isEnabled = isRunningFromApplications
+        if !isRunningFromApplications {
+            launchAtLoginCheckbox.toolTip = "Move StepAway to /Applications to enable this option."
+        }
+        contentView.addSubview(launchAtLoginCheckbox)
+
         window.contentView = contentView
     }
 
@@ -211,8 +226,6 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private func loadSettings() {
-        enabledCheckbox.state = AppSettings.shared.isEnabled ? .on : .off
-
         let timerIndex = indexForTime(AppSettings.shared.timerInterval)
         timerSlider.integerValue = timerIndex
         timerLabel.stringValue = formatTime(timeStops[timerIndex])
@@ -231,6 +244,8 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         } else if let index = availableSounds.firstIndex(of: "Glass") {
             soundPopup.selectItem(at: index)
         }
+
+        launchAtLoginCheckbox.state = AppSettings.shared.launchAtLogin ? .on : .off
 
         updateControlsEnabled()
     }
@@ -258,12 +273,7 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private func updateControlsEnabled() {
-        let enabled = enabledCheckbox.state == .on
-        timerSlider.isEnabled = enabled
-        idleSlider.isEnabled = enabled
-        stillThereCheckbox.isEnabled = enabled
-
-        let stillThereEnabled = enabled && stillThereCheckbox.state == .on
+        let stillThereEnabled = stillThereCheckbox.state == .on
         playSoundCheckbox.isEnabled = stillThereEnabled
 
         let soundEnabled = stillThereEnabled && playSoundCheckbox.state == .on
@@ -271,10 +281,24 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         testSoundButton.isEnabled = soundEnabled
     }
 
-    @objc private func enabledChanged() {
-        AppSettings.shared.isEnabled = enabledCheckbox.state == .on
-        updateControlsEnabled()
-        onSettingsChanged?()
+    @objc private func launchAtLoginChanged() {
+        let newState = launchAtLoginCheckbox.state == .on
+        AppSettings.shared.launchAtLogin = newState
+
+        if #available(macOS 13.0, *) {
+            do {
+                if newState {
+                    try SMAppService.mainApp.register()
+                } else {
+                    try SMAppService.mainApp.unregister()
+                }
+            } catch {
+                print("Failed to update launch at login: \(error)")
+            }
+        } else {
+            let launcherAppId = "io.github.the-michael-toy.StepAway.launcher"
+            SMLoginItemSetEnabled(launcherAppId as CFString, newState)
+        }
     }
 
     @objc private func timerSliderChanged() {

@@ -2,7 +2,6 @@
 // This file is part of StepAway - https://github.com/the-michael-toy/StepAway
 
 import AppKit
-import ServiceManagement
 
 class MenuBarController: NSObject, NSMenuDelegate {
     private var statusItem: NSStatusItem!
@@ -12,7 +11,7 @@ class MenuBarController: NSObject, NSMenuDelegate {
     private let debugLog = DebugEventLog(capacity: 500)
 
     // Menu items that need updating
-    private var launchAtLoginMenuItem: NSMenuItem!
+    private var stopMenuItem: NSMenuItem!
     private var debugLogMenuItem: NSMenuItem!
     private var debugLogSeparatorMenuItem: NSMenuItem!
     private var gettingUpToWalkSeparatorMenuItem: NSMenuItem!
@@ -26,11 +25,6 @@ class MenuBarController: NSObject, NSMenuDelegate {
 
     private let walkAlertController = WalkAlertController()
     private let congratsController = CongratsController()
-
-    private var isRunningFromApplications: Bool {
-        let bundlePath = Bundle.main.bundlePath
-        return bundlePath.hasPrefix("/Applications/")
-    }
 
     override init() {
         debugLogController = DebugLogWindowController(debugLog: debugLog)
@@ -207,43 +201,25 @@ class MenuBarController: NSObject, NSMenuDelegate {
         menu.autoenablesItems = false
         menu.delegate = self
 
-        // Settings
-        let settingsItem = NSMenuItem(
-            title: "Settings...",
-            action: #selector(showSettings),
+        // Stop
+        stopMenuItem = NSMenuItem(
+            title: "Stop",
+            action: #selector(stopTimer),
             keyEquivalent: ""
         )
-        settingsItem.target = self
-        menu.addItem(settingsItem)
+        stopMenuItem.target = self
+        menu.addItem(stopMenuItem)
 
-        menu.addItem(NSMenuItem.separator())
-
-        // Launch at login
-        launchAtLoginMenuItem = NSMenuItem(
-            title: "Launch at Login",
-            action: #selector(toggleLaunchAtLogin(_:)),
+        // Restart
+        let restartItem = NSMenuItem(
+            title: "Restart",
+            action: #selector(restartTimer),
             keyEquivalent: ""
         )
-        launchAtLoginMenuItem.target = self
-        launchAtLoginMenuItem.isEnabled = isRunningFromApplications
-        launchAtLoginMenuItem.state = AppSettings.shared.launchAtLogin ? .on : .off
-        menu.addItem(launchAtLoginMenuItem)
+        restartItem.target = self
+        menu.addItem(restartItem)
 
-        menu.addItem(NSMenuItem.separator())
-
-        // Reset timer
-        let resetItem = NSMenuItem(
-            title: "Reset Timer",
-            action: #selector(resetTimer),
-            keyEquivalent: ""
-        )
-        resetItem.target = self
-        menu.addItem(resetItem)
-
-        gettingUpToWalkSeparatorMenuItem = NSMenuItem.separator()
-        gettingUpToWalkSeparatorMenuItem.isHidden = true
-        menu.addItem(gettingUpToWalkSeparatorMenuItem)
-
+        // We're walking (contextual, hidden by default)
         gettingUpToWalkMenuItem = NSMenuItem(
             title: "We're walking, We're walking ...",
             action: #selector(gettingUpToWalk),
@@ -253,7 +229,20 @@ class MenuBarController: NSObject, NSMenuDelegate {
         gettingUpToWalkMenuItem.isHidden = true
         menu.addItem(gettingUpToWalkMenuItem)
 
+        gettingUpToWalkSeparatorMenuItem = NSMenuItem.separator()
+        gettingUpToWalkSeparatorMenuItem.isHidden = true
+        menu.addItem(gettingUpToWalkSeparatorMenuItem)
+
         menu.addItem(NSMenuItem.separator())
+
+        // Settings
+        let settingsItem = NSMenuItem(
+            title: "Settings...",
+            action: #selector(showSettings),
+            keyEquivalent: ""
+        )
+        settingsItem.target = self
+        menu.addItem(settingsItem)
 
         // Hidden debug log item (revealed only when Option is held while opening menu)
         debugLogSeparatorMenuItem = NSMenuItem.separator()
@@ -321,17 +310,11 @@ class MenuBarController: NSObject, NSMenuDelegate {
         activityMonitor.updateIdleInterval()
         logSettingsSnapshot(reason: "settingsChanged")
 
-        if AppSettings.shared.isEnabled {
-            if coordinator.state == .disabled {
-                handle(event: .enableRequested)
-            } else {
-                handle(event: .resetRequested)
-            }
-        } else {
-            handle(event: .disableRequested)
+        if coordinator.state != .disabled {
+            handle(event: .resetRequested)
         }
         // Settings is still open — keep timer stopped until settings closes.
-        // resetRequested/enableRequested may have restarted it.
+        // resetRequested may have restarted it.
         timerManager.stop()
     }
 
@@ -342,31 +325,18 @@ class MenuBarController: NSObject, NSMenuDelegate {
         aboutController.show()
     }
 
-    @objc private func toggleLaunchAtLogin(_ sender: NSMenuItem) {
-        let newState = !AppSettings.shared.launchAtLogin
-        AppSettings.shared.launchAtLogin = newState
-        sender.state = newState ? .on : .off
-
-        // Register/unregister with Launch Services
-        if #available(macOS 13.0, *) {
-            do {
-                if newState {
-                    try SMAppService.mainApp.register()
-                } else {
-                    try SMAppService.mainApp.unregister()
-                }
-            } catch {
-                print("Failed to update launch at login: \(error)")
-            }
+    @objc private func restartTimer() {
+        if coordinator.state == .disabled {
+            AppSettings.shared.isEnabled = true
+            handle(event: .enableRequested)
         } else {
-            // Fallback for older macOS versions
-            let launcherAppId = "io.github.the-michael-toy.StepAway.launcher"
-            SMLoginItemSetEnabled(launcherAppId as CFString, newState)
+            handle(event: .resetRequested)
         }
     }
 
-    @objc private func resetTimer() {
-        handle(event: .resetRequested)
+    @objc private func stopTimer() {
+        AppSettings.shared.isEnabled = false
+        handle(event: .disableRequested)
     }
 
     @objc private func gettingUpToWalk() {
@@ -384,6 +354,7 @@ class MenuBarController: NSObject, NSMenuDelegate {
         let shouldShowWalk = coordinator.state == .running || coordinator.state == .snoozed || coordinator.state == .pausedUntilBreak
         gettingUpToWalkMenuItem.isHidden = !shouldShowWalk
         gettingUpToWalkSeparatorMenuItem.isHidden = !shouldShowWalk
+        stopMenuItem.isEnabled = coordinator.state != .disabled
         let shouldShowDebug = isOptionKeyPressed()
         debugLogMenuItem.isHidden = !shouldShowDebug
         debugLogSeparatorMenuItem.isHidden = !shouldShowDebug
