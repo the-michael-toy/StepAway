@@ -29,13 +29,12 @@ A macOS menu bar app that reminds you to take walking breaks.
 
 ### Dropdown Menu Options
 - **Settings...** - opens Settings window with sliders for timer interval and idle timeout
-- **Launch at Login** - toggles auto-start (greyed out if not running from /Applications)
-- **Reset Timer** - resets countdown to full interval
+- **Stop** / **Restart** - stops or restarts the timer (replaces old "Reset Timer")
 - **About StepAway...** - shows About window with version and links
 - **Quit StepAway** - exits the app
 
 ### Settings Window
-- **Enable StepAway** checkbox - toggles the timer on/off
+- **Launch at Login** - toggles auto-start (greyed out if not running from /Applications)
 - **Reminder interval** slider - time between walk reminders
 - **Idle timeout** slider - time before "Still there?" prompt appears
 - Both sliders use discrete stops: 5 sec, 10 sec, 30 sec, 5, 10, 15, 30, 45, 60, 90, 120, 150, 180 minutes

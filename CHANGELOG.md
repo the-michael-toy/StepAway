@@ -1,5 +1,11 @@
 # Changelog
 
+## Version 1.23
+
+- Replaced "Reset Timer" menu item with separate **Stop** and **Restart** menu items for clearer control
+- Moved "Launch at Login" from the menu bar into the Settings window
+- Removed "Enable StepAway" checkbox from Settings (use Stop/Restart instead)
+
 ## Version 1.22
 
 - Added always-visible "We're walking, We're walking ..." menu item so you can tell StepAway you're getting up to walk at any time, not just from the walk alert
